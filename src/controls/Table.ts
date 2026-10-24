@@ -1,4 +1,5 @@
 import DOMElement = Phaser.GameObjects.DOMElement;
+import {FONT, TEXT_COLOR} from "../ui/theme";
 
 export class Table {
 
@@ -15,10 +16,10 @@ export class Table {
     create(x: number, y: number, width: number, height: number) {
         const style = `
         width: ${width}px; max-height: ${height}px;
-        border: 1px solid white;
         border-collapse: collapse;
-        color:white;
-        font-size: 28px;
+        font-family: ${FONT.replace(/"/g, "'")};
+        font-size: 24px;
+        color: ${TEXT_COLOR.ink};
         `
 
         this.element = this.scene.add.dom(x, y).createFromHTML(`<table style="${style}"></table>`).setOrigin(0, 0);
@@ -37,10 +38,20 @@ export class Table {
                 const cell = row.insertCell(c)
                 cell.textContent = data[r][c]
 
-                cell.style.border = "1px solid white"
-                cell.style.color = "white"
-                cell.style.padding = "4px 8px"
-                cell.style.height = "40px"
+                cell.style.borderBottom = "1px solid rgba(107, 68, 35, 0.35)"
+                cell.style.padding = "4px 14px"
+                cell.style.height = "34px"
+                cell.style.background = r % 2 ? "rgba(226, 205, 159, 0.45)" : "transparent"
+                if (c > 0) {
+                    // второй столбец - пометки HOST / YOU
+                    cell.style.textAlign = "right"
+                    cell.style.fontSize = "16px"
+                    cell.style.fontWeight = "bold"
+                    cell.style.letterSpacing = "2px"
+                    cell.style.color = TEXT_COLOR.inkSoft
+                } else {
+                    cell.style.fontWeight = "bold"
+                }
 
             }
         }

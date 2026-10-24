@@ -1,4 +1,5 @@
 import DOMElement = Phaser.GameObjects.DOMElement;
+import {FONT, TEXT_COLOR} from "../ui/theme";
 
 export class Input {
 
@@ -14,12 +15,21 @@ export class Input {
         return this
     }
 
-    create(x: number, y: number, width: number, height: number, fontColor: string = 'black', backgroundColor: string = 'white') {
+    create(x: number, y: number, width: number, height: number, fontColor: string = TEXT_COLOR.ink, backgroundColor: string = '#fbf4e2') {
         const style = `
-        width: ${width}px; height: ${height}px; 
-        font-size: ${height}px;
-        color:${fontColor}; 
-        background-color:${backgroundColor};
+        box-sizing: border-box;
+        width: ${width}px; height: ${height}px;
+        padding: 0 14px;
+        font-family: ${FONT.replace(/"/g, "'")};
+        font-size: ${Math.round(height * 0.5)}px;
+        font-weight: bold;
+        letter-spacing: 1px;
+        color: ${fontColor};
+        background-color: ${backgroundColor};
+        border: 2px solid #6b4423;
+        border-radius: 10px;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.15);
+        outline: none;
         `
 
         // это div содеражщий в себе input
@@ -39,6 +49,12 @@ export class Input {
         const inputElement = this.element?.node.firstElementChild as HTMLInputElement
         inputElement.value = text ?? ''
 
+        return this
+    }
+
+    setPlaceholder(placeholder: string) {
+        const inputElement = this.element?.node.firstElementChild as HTMLInputElement
+        inputElement.placeholder = placeholder
         return this
     }
 

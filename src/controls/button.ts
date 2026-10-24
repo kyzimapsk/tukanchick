@@ -1,5 +1,6 @@
 import Text = Phaser.GameObjects.Text;
 import {Image} from "./image";
+import {FONT} from "../ui/theme";
 
 export class Button extends Image {
 
@@ -16,7 +17,7 @@ export class Button extends Image {
         this._disable = false
 
         if (text) {
-            this.textGO = this.scene.add.text(x, y, text).setOrigin(0, 0);
+            this.textGO = this.scene.add.text(x, y, text, {fontFamily: FONT}).setOrigin(0, 0);
         }
 
         if (onClick && this.imageGO) {

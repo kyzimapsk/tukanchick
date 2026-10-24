@@ -17,6 +17,7 @@ import MapCamera from "./camera";
 import {EventBus} from "../bus/EventBus";
 import {director} from "../../index";
 import {sharpenTexts} from "../../scale/screen";
+import {COLOR, TEXT_COLOR, textStyle} from "../../ui/theme";
 import {Point} from "../../entity/point";
 import Graphics = Phaser.GameObjects.Graphics;
 
@@ -25,6 +26,8 @@ export default class MapScene extends Phaser.Scene {
     mapConfig: MapConfig
 
     graphics: Graphics
+
+    roads: Graphics
 
     artifactMapZones: Map<ArtifactsEnum, ArtifactMapZone>
 
@@ -101,8 +104,6 @@ export default class MapScene extends Phaser.Scene {
 
                 //this.drawHexagons(h)
 
-                this.drawTownLetter(h)
-
                 polygonGameObject
                     .setInteractive(polygonGeom,
                         (hitArea: Phaser.Geom.Polygon, x: number, y: number) => this.playerInfo.readyTouch && !camera.getDragging() && hitArea.contains(x, y))
@@ -138,6 +139,10 @@ export default class MapScene extends Phaser.Scene {
             }
         )
 
+        // слои: подсветка гексов -> дороги -> буквы деревень
+        this.roads = this.add.graphics()
+        this.playerInfo.hexagons.forEach((h) => this.drawTownLetter(h))
+
         // отпустили палец/кнопку не над гексом - выбор сбрасывается
         this.input.on(Phaser.Input.Events.POINTER_UP_OUTSIDE, () => this.clearSelected())
         this.input.on(Phaser.Input.Events.POINTER_UP, (pointer: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
@@ -150,7 +155,7 @@ export default class MapScene extends Phaser.Scene {
 
         for (const z in ScoreZonesEnum) {
             if (mapInfo.scores[z]?.x) {
-                this.scoreZones[z].create(mapInfo.scores[z].x, mapInfo.scores[z].y, "___").setTextFont(80, "black")
+                this.scoreZones[z].create(mapInfo.scores[z].x, mapInfo.scores[z].y, "").setTextFont(72, TEXT_COLOR.ink, "bold")
             }
         }
 
@@ -193,11 +198,12 @@ export default class MapScene extends Phaser.Scene {
 
         if (pgo) {
             if (hex.isSelected) {
-                pgo.setFillStyle(0x61b65f, 0.6)
+                pgo.setFillStyle(COLOR.orange, 0.45).setStrokeStyle(8, COLOR.wood, 0.9)
             } else if (hex.artifactConnected) {
-                pgo.setFillStyle(0xcccc00, 0.4)
+                pgo.setFillStyle(COLOR.green, 0.32).setStrokeStyle(6, COLOR.green, 0.9)
             } else {
                 pgo.isFilled = false
+                pgo.isStroked = false
             }
         }
     }
@@ -212,11 +218,19 @@ export default class MapScene extends Phaser.Scene {
 
     private drawRoad(hexes: Hexagon[]) {
 
-        const pointA = this.hexagonCenter(hexes[0])
-        const pointB = this.hexagonCenter(hexes[1])
+        const a = this.hexagonCenter(hexes[0])
+        const b = this.hexagonCenter(hexes[1])
 
-        this.add.line(0, 0, pointA.x, pointA.y, pointB.x, pointB.y, 0xff0000).setOrigin(0, 0)
-            .setLineWidth(3, 3)
+        // тропа: тёмная окантовка, красная дорога, точки-стоянки в центрах гексов
+        this.roads
+            .lineStyle(28, COLOR.woodDark, 0.45).lineBetween(a.x, a.y + 4, b.x, b.y + 4)
+            .lineStyle(18, COLOR.red, 1).lineBetween(a.x, a.y, b.x, b.y)
+            .lineStyle(4, COLOR.parchment, 0.55).lineBetween(a.x, a.y, b.x, b.y)
+
+        for (const p of [a, b]) {
+            this.roads.fillStyle(COLOR.woodDark, 1).fillCircle(p.x, p.y, 16)
+                .fillStyle(COLOR.red, 1).fillCircle(p.x, p.y, 11)
+        }
 
     }
 
@@ -234,10 +248,8 @@ export default class MapScene extends Phaser.Scene {
         const points = this.artifactMapZones.get(artifact)?.points
 
         if (conCount > 0 && points && points.length > 0) {
-            this.graphics.lineStyle(4, 0x00ff00, 1);
-
-            for (let i = 0; i < conCount; ++i) {
-                this.graphics.strokeCircle(points[i].x, points[i].y, 45);
+            for (let i = 0; i < conCount && i < points.length; ++i) {
+                this.markFound(points[i])
             }
         }
 
@@ -253,9 +265,16 @@ export default class MapScene extends Phaser.Scene {
         // обвести на боковой панеле
         const letter = townHexes[0].townLetter
 
-        const point = this.townZones.get(letter).point
-        this.graphics.lineStyle(4, 0x00ff00, 1);
-        this.graphics.strokeCircle(point.x, point.y, 45);
+        this.markFound(this.townZones.get(letter).point)
+    }
+
+    /**
+     * Отметка на листе очков сбоку карты: зелёный круг, как обводят ручкой
+     */
+    private markFound(point: Point) {
+        this.graphics
+            .fillStyle(COLOR.green, 0.18).fillCircle(point.x, point.y, 44)
+            .lineStyle(7, COLOR.green, 0.95).strokeCircle(point.x, point.y, 44)
     }
 
 
@@ -284,11 +303,9 @@ export default class MapScene extends Phaser.Scene {
             const x = hexagon.points[5].x + (hexagon.points[1].x - hexagon.points[5].x) / 3
             const y = hexagon.points[0].y + (hexagon.points[2].y - hexagon.points[0].y) / 3
 
-            this.add.text(x, y, hexagon.townLetter)
+            this.add.text(x, y, hexagon.townLetter, textStyle(96))
                 .setOrigin(0, 0)
-                .setColor("#000000")
-                .setFontStyle("bold")
-                .setFontSize(100)
+                .setStroke(TEXT_COLOR.parchment, 12)
         }
     }
 

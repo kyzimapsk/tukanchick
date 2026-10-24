@@ -1,7 +1,5 @@
 import * as Phaser from "phaser";
 import {ScenesEnum} from "../../enums/scenes.enum";
-import {Button} from "../../controls/button";
-import {Assets} from "../../assets";
 import {startMultiPlayer} from "../../index";
 import {roundCountFor} from "../../game/board";
 import {LobbyConfig} from "../../entity/lobbyConfig";
@@ -22,8 +20,10 @@ import {
     MemberDto,
     NAME_MAX_LENGTH
 } from "../../multiplayer/protocol";
-import {keepFitted} from "../../scale/screen";
+import {keepFitted, pixelRatio} from "../../scale/screen";
 import {copyText} from "../../controls/clipboard";
+import {COLOR, drawPanel, TEXT_COLOR, textStyle} from "../../ui/theme";
+import {WoodButton} from "../../ui/wood-button";
 
 const NICKNAME_KEY = 'user_nick_name'
 
@@ -43,28 +43,34 @@ function saveNickname(nick: string) {
     }
 }
 
+// отступ карточки лобби от краёв меню
+const PANEL_MARGIN = 60
+
 export default class LobbyScene extends Phaser.Scene {
 
     config: LobbyConfig
 
     nicknameLabel: Phaser.GameObjects.Text
     nicknameTextBox: Input
-    commonCaptionText: Button
 
+    messageText: Phaser.GameObjects.Text
 
-    createLobbyButton: Button
-    joinLobbyButton: Button
-
-    createdLobbyIdText: Button
-    copyLobbyIdButton: Button
-    joinLobbyCaptionText: Button
+    // выбор: создать лобби или войти по ID
+    chooseObjects: Phaser.GameObjects.GameObject[]
+    createLobbyButton: WoodButton
+    joinLobbyButton: WoodButton
     joinLobbyIdTextBox: Input
+
+    // после входа в лобби
+    lobbyIdCaption: Phaser.GameObjects.Text
+    lobbyIdText: Phaser.GameObjects.Text
+    copyLobbyIdButton: WoodButton
 
     partyMemberTable: Table
 
-    startPetitButton: Button
-    startGrandeButton: Button
-    exitButton: Button
+    startPetitButton: WoodButton
+    startGrandeButton: WoodButton
+    exitButton: WoodButton
 
     selfId: number
 
@@ -74,23 +80,8 @@ export default class LobbyScene extends Phaser.Scene {
         super(ScenesEnum.LOBBY)
 
         this.nicknameTextBox = new Input(this)
-        this.commonCaptionText = new Button(this)
-
-
-        this.createLobbyButton = new Button(this).preloadExtern(Assets.SAND_1)
-        this.joinLobbyButton = new Button(this).preloadExtern(Assets.SAND_1)
-
-        this.createdLobbyIdText = new Button(this)
-        this.copyLobbyIdButton = new Button(this).preloadExtern(Assets.SAND_1)
-        this.joinLobbyCaptionText = new Button(this)
         this.joinLobbyIdTextBox = new Input(this)
-
         this.partyMemberTable = new Table(this)
-
-
-        this.startPetitButton = new Button(this).preloadExtern(Assets.SAND_1)
-        this.startGrandeButton = new Button(this).preloadExtern(Assets.SAND_1)
-        this.exitButton = new Button(this).preloadExtern(Assets.SAND_1)
     }
 
     preload() {
@@ -101,115 +92,84 @@ export default class LobbyScene extends Phaser.Scene {
         this.selfId = undefined
         this.lobbyId = undefined
 
-        const centerX = this.config.parentWidth / 2
-        const leftX = 40
-        const topY = 40
+        const width = this.config.parentWidth
+        const height = this.config.parentHeight
+        const centerX = width / 2
 
-        const width = this.config.parentWidth - leftX * 2;
-        const height = this.config.parentHeight - topY * 2;
+        const panelX = PANEL_MARGIN
+        const panelY = PANEL_MARGIN
+        const panelWidth = width - PANEL_MARGIN * 2
+        const panelHeight = height - PANEL_MARGIN * 2
 
-        const botY = topY + height
+        const left = panelX + 50
+        const contentWidth = panelWidth - 100
+        const leftColumnX = left + contentWidth / 4
+        const rightColumnX = left + contentWidth * 3 / 4
+        const columnWidth = contentWidth / 2 - 30
 
         // затемняет меню под лобби на любом размере экрана
-        this.add.rectangle(centerX, this.config.parentHeight / 2, 100000, 100000, 0x000000, 0.6)
-        this.add.rectangle(this.config.parentWidth / 2, this.config.parentHeight / 2, width, height, 0x000000, 0.9).setOrigin(0.5, 0.5)
+        this.add.rectangle(centerX, height / 2, 100000, 100000, COLOR.shadow, 0.6)
+        drawPanel(this.add.graphics(), panelX, panelY, panelWidth, panelHeight)
 
-        let buttonSpace = 10
-        let buttonWidth = width / 2 - buttonSpace * 2
-        let buttonHeight = 50
-
-        let leftColumnCenterX = leftX + buttonSpace + buttonWidth / 2
-        let rightColumnCenterX = centerX + buttonSpace + buttonWidth / 2
+        this.add.text(centerX, panelY + 62, "MULTIPLAYER", textStyle(38)).setOrigin(0.5).setLetterSpacing(4)
+        this.messageText = this.add.text(centerX, panelY + 106, "", {...textStyle(18, TEXT_COLOR.inkSoft, false), fontStyle: "italic"})
+            .setOrigin(0.5)
 
         // nickname
-        let nicknamePostY = topY + buttonSpace + buttonHeight / 2
-
-
-        this.nicknameLabel = this.add.text(leftColumnCenterX, nicknamePostY, "Nickname:").setFontSize(30).setFontStyle('bold').setOrigin(0.5)
-
-        this.nicknameTextBox.create(rightColumnCenterX, nicknamePostY, buttonWidth, buttonHeight, 'white', 'gray').setOrigin(0.5)
+        const nicknameY = panelY + 168
+        this.nicknameLabel = this.caption(leftColumnX, nicknameY, "YOUR NICKNAME")
+        this.nicknameTextBox.create(rightColumnX, nicknameY, columnWidth, 50).setOrigin(0.5)
         this.nicknameTextBox.setMaxLength(NAME_MAX_LENGTH)
+        this.nicknameTextBox.setPlaceholder("Nickname")
         this.nicknameTextBox.setText(loadNickname())
-
         this.nicknameTextBox.onChange = (newNick: string) => saveNickname(newNick)
 
+        // создать или войти
+        const chooseY = panelY + 240
+        const divider = this.add.graphics()
+            .lineStyle(1, COLOR.wood, 0.3).lineBetween(centerX, chooseY, centerX, chooseY + 150)
+            .lineStyle(1, COLOR.wood, 0.3).lineBetween(left, chooseY - 20, left + contentWidth, chooseY - 20)
 
-        // common caption
-        let commonCaptionPosY = nicknamePostY + buttonHeight + buttonSpace + buttonSpace
+        const newGameCaption = this.caption(leftColumnX, chooseY + 10, "NEW GAME")
+        const joinCaption = this.caption(rightColumnX, chooseY + 10, "JOIN A GAME")
 
-        this.commonCaptionText.create(centerX, commonCaptionPosY, "CREATE LOBBY OR PUT LOBBY ID TO JOIN").setTextFont(26, 'white', 'bold').setOrigin(0.5)
+        this.createLobbyButton = new WoodButton(this, leftColumnX, chooseY + 95, columnWidth, 60, "CREATE LOBBY",
+            () => this.createLobby(), "wood", 24)
 
-
-        // buttons create/join
-        let buttonCreateOrJoinPosY = commonCaptionPosY + buttonHeight + buttonSpace + buttonSpace
-
-        this.createLobbyButton.create(leftColumnCenterX, buttonCreateOrJoinPosY,
-            "CREATE LOBBY", () => this.createLobby()
-        ).setDisplaySize(buttonWidth, buttonHeight)
-            .setOrigin(0.5)
-            .setTextFont(30, "black", "bold")
-
-
-        this.joinLobbyButton.create(rightColumnCenterX, buttonCreateOrJoinPosY,
-            "JOIN LOBBY", () => this.joinLobby()
-        ).setDisplaySize(buttonWidth, buttonHeight)
-            .setOrigin(0.5, 0.5)
-            .setTextFont(30, "black", "bold")
-
-
-        // text for created or joined lobby id
-        let textLobbyIdPosY = buttonCreateOrJoinPosY + buttonHeight + buttonSpace
-
-        this.createdLobbyIdText.create(centerX, textLobbyIdPosY, "__").setTextFont(30, 'white', 'bold').setOrigin(0.5)
-            .setVisible(false)
-
-        // хост копирует ID и отправляет его остальным игрокам
-        this.copyLobbyIdButton.create(rightColumnCenterX + buttonWidth / 2 - 80, textLobbyIdPosY,
-            "COPY", () => this.copyLobbyId()
-        ).setDisplaySize(150, buttonHeight - 6)
-            .setOrigin(0.5)
-            .setTextFont(26, "black", "bold")
-            .setVisible(false)
-
-        this.joinLobbyCaptionText.create(leftColumnCenterX, textLobbyIdPosY, "JOIN TO ").setTextFont(30, 'white', 'bold').setOrigin(0.5)
-        this.joinLobbyIdTextBox.create(rightColumnCenterX, textLobbyIdPosY, buttonWidth, buttonHeight, 'white', 'SlateGray').setOrigin(0.5)
+        this.joinLobbyIdTextBox.create(rightColumnX, chooseY + 65, columnWidth, 50).setOrigin(0.5)
         this.joinLobbyIdTextBox.setMaxLength(LOBBY_ID_LENGTH)
+        this.joinLobbyIdTextBox.setPlaceholder("Lobby ID")
+        this.joinLobbyButton = new WoodButton(this, rightColumnX, chooseY + 130, columnWidth, 50, "JOIN LOBBY",
+            () => this.joinLobby(), "parchment", 22)
 
-        // party members
-        let exitButtonPosY = botY - buttonHeight
+        this.chooseObjects = [divider, newGameCaption, joinCaption]
 
-        let partyMemberTablePosY = textLobbyIdPosY + buttonHeight + buttonSpace
-        let partyMemberTableHeight = exitButtonPosY - partyMemberTablePosY - buttonHeight
-
-        this.partyMemberTable.create(centerX, partyMemberTablePosY, width - buttonSpace * 2, partyMemberTableHeight).setOrigin(0.5, 0)
-
-
-        let thirdWidth = width / 3
-
-        let bottomButtonWidth = thirdWidth - buttonSpace * 3
-
-        let startPetitCenterPosX = leftX + thirdWidth - thirdWidth / 2
-        this.startPetitButton.create(startPetitCenterPosX, exitButtonPosY,
-            "START PETIT", () => this.startGame(IslandEnum.PETIT)
-        ).setDisplaySize(bottomButtonWidth, buttonHeight)
-            .setOrigin(0.5)
-            .setTextFont(26, "black", "bold")
+        // ID лобби после входа: хост копирует его и отправляет остальным
+        this.lobbyIdCaption = this.caption(centerX, chooseY + 10, "LOBBY ID").setVisible(false)
+        this.lobbyIdText = this.add.text(centerX, chooseY + 70, "", textStyle(52)).setOrigin(0.5).setLetterSpacing(8)
             .setVisible(false)
+        this.copyLobbyIdButton = new WoodButton(this, centerX, chooseY + 135, 180, 44, "COPY",
+            () => this.copyLobbyId(), "parchment", 18).setVisible(false)
 
-        let startGrandeCenterPosX = leftX + thirdWidth * 2 - thirdWidth / 2
-        this.startGrandeButton.create(startGrandeCenterPosX, exitButtonPosY,
-            "START GRANDE", () => this.startGame(IslandEnum.GRANDE)
-        ).setDisplaySize(bottomButtonWidth, buttonHeight)
-            .setOrigin(0.5)
-            .setTextFont(26, "black", "bold")
-            .setVisible(false)
+        // игроки
+        // до 6 игроков по ~42px - таблица заканчивается выше нижних кнопок
+        const playersY = panelY + 420
+        this.caption(left, playersY, "PLAYERS").setOrigin(0, 0.5)
+        this.partyMemberTable.create(centerX, playersY + 22, contentWidth, 300).setOrigin(0.5, 0)
 
-        let exitCenterPosX = leftX + width - thirdWidth / 2
-        this.exitButton.create(exitCenterPosX, exitButtonPosY,
-            "EXIT", () => this.exit()
-        ).setDisplaySize(bottomButtonWidth, buttonHeight)
-            .setOrigin(0.5)
-            .setTextFont(30, "black", "bold")
+        // кнопки внизу
+        const bottomY = panelY + panelHeight - 70
+        const thirdWidth = contentWidth / 3
+        const bottomButtonWidth = thirdWidth - 20
+
+        this.startPetitButton = new WoodButton(this, left + thirdWidth / 2, bottomY, bottomButtonWidth, 56, "START PETIT",
+            () => this.startGame(IslandEnum.PETIT), "wood", 22).setVisible(false)
+        this.startGrandeButton = new WoodButton(this, left + thirdWidth * 1.5, bottomY, bottomButtonWidth, 56, "START GRANDE",
+            () => this.startGame(IslandEnum.GRANDE), "wood", 22).setVisible(false)
+        this.exitButton = new WoodButton(this, left + thirdWidth * 2.5, bottomY, bottomButtonWidth, 56, "EXIT",
+            () => this.exit(), "parchment", 22)
+
+        this.showMessage("Create a lobby or enter its ID to join")
 
 
         this.scene.pause(ScenesEnum.MAIN_MENU) // переделать на popup panel
@@ -223,7 +183,11 @@ export default class LobbyScene extends Phaser.Scene {
         client.onReceive<LobbyDto>(CommandsEnum.START_GAME_SUCCESS, (data) => this.startGameSuccess(data))
         client.onReceive<ErrorDto>(CommandsEnum.ERROR, (data) => this.showMessage(String(data.message)))
 
-        keepFitted(this, this.config.parentWidth, this.config.parentHeight)
+        keepFitted(this, width, height, "center", pixelRatio())
+    }
+
+    private caption(x: number, y: number, text: string) {
+        return this.add.text(x, y, text, textStyle(15, TEXT_COLOR.inkSoft)).setOrigin(0.5).setLetterSpacing(3)
     }
 
     private nickname(): string | null {
@@ -236,7 +200,7 @@ export default class LobbyScene extends Phaser.Scene {
     }
 
     private showMessage(text: string) {
-        this.commonCaptionText.setText(text)
+        this.messageText.setText(text)
     }
 
     createLobby() {
@@ -247,12 +211,8 @@ export default class LobbyScene extends Phaser.Scene {
     }
 
     createLobbySuccess(lobbyDto: LobbyDto) {
-        this.createdLobbyIdText.setText(`HOST LOBBY ID: ${lobbyDto.lobbyId}`).setVisible(true)
-        // текст сдвигается влево, справа от него - кнопка копирования
-        this.createdLobbyIdText.textGO.setX(this.config.parentWidth / 2 - 90)
-        this.lobbyId = lobbyDto.lobbyId
-        this.copyLobbyIdButton.setVisible(true)
         this.onJoined(lobbyDto)
+        this.copyLobbyIdButton.setVisible(true)
         this.enableHostControls()
     }
 
@@ -275,13 +235,17 @@ export default class LobbyScene extends Phaser.Scene {
     }
 
     joinLobbySuccess(lobbyDto: LobbyDto) {
-        this.createdLobbyIdText.setText(`JOIN SUCCESS: ${lobbyDto.lobbyId}`).setVisible(true)
         this.onJoined(lobbyDto)
         this.showMessage("WAITING FOR HOST TO START")
     }
 
     private onJoined(lobbyDto: LobbyDto) {
         this.selfId = lobbyDto.you
+        this.lobbyId = lobbyDto.lobbyId
+
+        this.lobbyIdText.setText(String(lobbyDto.lobbyId)).setVisible(true)
+        this.lobbyIdCaption.setVisible(true)
+
         this.disableControlsAfterJoin()
         this.refreshLobbyMembers(lobbyDto)
         this.nicknameLabel.setVisible(false)
@@ -314,14 +278,14 @@ export default class LobbyScene extends Phaser.Scene {
     enableHostControls() {
         this.startPetitButton.setVisible(true)
         this.startGrandeButton.setVisible(true)
-        this.showMessage("WAITING FOR PLAYERS")
+        this.showMessage("Send the lobby ID to your friends, then start the game")
     }
 
     disableControlsAfterJoin() {
-        this.createLobbyButton.setDisable(true)
-        this.joinLobbyButton.setDisable(true)
-        this.joinLobbyCaptionText.setVisible(false)
+        this.createLobbyButton.setVisible(false)
+        this.joinLobbyButton.setVisible(false)
         this.joinLobbyIdTextBox.setVisible(false)
+        this.chooseObjects.forEach((go) => (go as unknown as Phaser.GameObjects.Components.Visible).setVisible(false))
     }
 
     refreshLobbyMembers(lobbyDto: LobbyDto) {
@@ -330,7 +294,7 @@ export default class LobbyScene extends Phaser.Scene {
         lobbyDto.members?.forEach((m) => {
             const line: string[] = []
             line.push(String(m.name))
-            line.push([m.host ? "HOST" : "", m.memberId === this.selfId ? "YOU" : ""].filter(s => s).join(", "))
+            line.push([m.host ? "HOST" : "", m.memberId === this.selfId ? "YOU" : ""].filter(s => s).join(" · "))
 
             stringData.push(line)
         })

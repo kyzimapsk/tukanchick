@@ -1,14 +1,13 @@
 import * as Phaser from "phaser";
 import {ScenesEnum} from "../../enums/scenes.enum";
-import {Button} from "../../controls/button";
 import {EventsEnum} from "../../enums/events.enum";
 import {PlayerInfo} from "../../entity/playerInfo";
-import {Assets} from "../../assets";
-import {Image} from "../../controls/image";
 import {EventBus} from "../bus/EventBus";
 import {ScoreZonesEnum} from "../../enums/scoreZones.enum";
 import {StandingDto} from "../../multiplayer/protocol";
-import {keepFitted} from "../../scale/screen";
+import {keepFitted, pixelRatio} from "../../scale/screen";
+import {COLOR, drawPanel, TEXT_COLOR, textStyle} from "../../ui/theme";
+import {WoodButton} from "../../ui/wood-button";
 
 export interface ScoreSceneData {
     playerInfo: PlayerInfo
@@ -19,7 +18,15 @@ export interface ScoreSceneData {
     selfId?: number
 }
 
-const WIDTH = 820
+const WIDTH = 640
+const PANEL_MARGIN = 20
+const ROW_HEIGHT = 52
+const STANDING_HEIGHT = 42
+
+const ROMAN = ["I", "II", "III"]
+
+// золото, серебро, бронза
+const MEDALS = [0xd4a017, 0xa8a8a8, 0xb87333]
 
 export default class ScoreScene extends Phaser.Scene {
 
@@ -29,29 +36,8 @@ export default class ScoreScene extends Phaser.Scene {
 
     selfId: number
 
-    back: Image
-
-    next: Button
-
-    message: Button
-
-    //очки
-    scoreZones: Button[]
-
-
     constructor() {
         super(ScenesEnum.SCORE)
-
-        this.back = new Image(this).preloadExtern(Assets.SCORES_IMAGE)
-
-        this.message = new Button(this).preloadExtern(Assets.SAND_1)
-        this.next = new Button(this).preloadExtern(Assets.SAND_1)
-
-        this.scoreZones = []
-        for (const z in ScoreZonesEnum) {
-            this.scoreZones[z] = new Button(this)
-        }
-
     }
 
     preload() {
@@ -62,82 +48,107 @@ export default class ScoreScene extends Phaser.Scene {
     }
 
     create() {
-        const hasStandings = this.standings?.length > 0
-        const height = hasStandings ? 780 : 600
+        const gameEnd = this.playerInfo.gameEnd
+        // по правилам раундов столько же, сколько на карте достопримечательностей каждого типа
+        const roundCount = this.playerInfo.artifactScores.values().next().value?.length || 2
+        const standings = this.standings?.length > 0 ? this.sortedStandings() : []
 
-        const centerX = WIDTH / 2;
-        const centerY = 290;
+        const scoreRows = roundCount + (gameEnd ? 2 : 0)
+        const standingsHeight = standings.length > 0 ? 50 + standings.length * STANDING_HEIGHT : 0
+        const height = 160 + scoreRows * ROW_HEIGHT + 20 + standingsHeight + 110
+
+        const centerX = WIDTH / 2
 
         // затемнение карты на экране любого размера
-        this.add.rectangle(centerX, height / 2, 100000, 100000, 0x000000, 0.5)
+        this.add.rectangle(centerX, height / 2, 100000, 100000, COLOR.shadow, 0.55)
+        drawPanel(this.add.graphics(), PANEL_MARGIN, PANEL_MARGIN, WIDTH - PANEL_MARGIN * 2, height - PANEL_MARGIN * 2)
 
-        this.back.create(centerX, centerY).setOrigin(0.5, 0.5).imageGO.setScale(0.7)
+        const title = gameEnd ? "GAME OVER" : `ROUND ${this.playerInfo.round} COMPLETE`
+        this.add.text(centerX, 82, title, textStyle(34)).setOrigin(0.5).setLetterSpacing(3)
+        this.add.text(centerX, 120, gameEnd ? "final score" : "points for connected landmarks",
+            {...textStyle(17, TEXT_COLOR.inkSoft, false), fontStyle: "italic"}).setOrigin(0.5)
 
-        this.message.create(centerX, 30, "___").setOrigin(0.5, 0)
-            .setDisplaySize(400, 50).setTextFont(40, "blue")
+        // очки
+        const left = PANEL_MARGIN + 50
+        const right = WIDTH - PANEL_MARGIN - 50
+        let y = 160 + ROW_HEIGHT / 2
 
+        const g = this.add.graphics()
 
-        let posY = centerY - 100
-
-        this.scoreZones[ScoreZonesEnum.ROUND0].create(centerX - 150, posY - 20, "___").setTextFont(50, "black")
-        this.scoreZones[ScoreZonesEnum.ROUND1].create(centerX - 150, posY + 80, "___").setTextFont(50, "black")
-        this.scoreZones[ScoreZonesEnum.ROUND2].create(centerX - 150, posY + 180, "___").setTextFont(50, "black")
-        this.scoreZones[ScoreZonesEnum.TOWN].create(centerX + 100, posY - 20, "___").setTextFont(50, "black")
-        this.scoreZones[ScoreZonesEnum.TOTAL].create(centerX + 100, posY + 180, "___").setTextFont(50, "black")
-
-        if (hasStandings) {
-            this.add.text(centerX, 490, this.standingsText())
-                .setOrigin(0.5, 0).setFontSize(26).setFontStyle('bold').setAlign('center')
-                .setColor('#ffffff').setStroke('#000000', 4).setLineSpacing(6)
+        for (let i = 0; i < roundCount; ++i) {
+            const played = i < this.playerInfo.round
+            const score = this.playerInfo.scores[i]
+            this.scoreRow(g, left, right, y, ROMAN[i], COLOR.orange, `ROUND ${ROMAN[i]}`,
+                played ? String(score ?? 0) : "—", played)
+            y += ROW_HEIGHT
         }
 
-        this.next.create(centerX, height - 60, 'NEXT', () => this.onNext()).setOrigin(0.5, 0.5)
-            .setDisplaySize(190, 80).setTextFont(60, "blue")
+        if (gameEnd) {
+            this.scoreRow(g, left, right, y, "V", COLOR.green, "VILLAGES",
+                String(this.playerInfo.scores[ScoreZonesEnum.TOWN] ?? 0), true)
+            y += ROW_HEIGHT
 
+            g.lineStyle(2, COLOR.wood, 0.6).lineBetween(left, y - ROW_HEIGHT / 2 + 2, right, y - ROW_HEIGHT / 2 + 2)
+            this.add.text(left, y, "TOTAL", textStyle(24)).setOrigin(0, 0.5).setLetterSpacing(3)
+            this.add.text(right, y, String(this.playerInfo.scores[ScoreZonesEnum.TOTAL] ?? 0), textStyle(40, TEXT_COLOR.ink))
+                .setOrigin(1, 0.5)
+            y += ROW_HEIGHT
+        }
 
-        this.show();
+        // игроки (мультиплеер)
+        if (standings.length > 0) {
+            y += 10
+            this.add.text(centerX, y, "PLAYERS", textStyle(15, TEXT_COLOR.inkSoft)).setOrigin(0.5).setLetterSpacing(3)
+            y += 36
 
-        keepFitted(this, WIDTH, height)
+            const scoreIndex = gameEnd ? ScoreZonesEnum.TOTAL : this.playerInfo.round - 1
+            standings.forEach((s, i) => {
+                const isSelf = s.memberId === this.selfId
+                if (isSelf) {
+                    g.fillStyle(COLOR.parchmentDark, 0.8).fillRoundedRect(left - 12, y - STANDING_HEIGHT / 2 + 3, right - left + 24, STANDING_HEIGHT - 6, 8)
+                }
+                g.fillStyle(MEDALS[i] ?? COLOR.parchmentDark, 1).fillCircle(left + 14, y, 14)
+                g.lineStyle(1.5, COLOR.wood, 0.8).strokeCircle(left + 14, y, 14)
+                this.add.text(left + 14, y, String(i + 1), textStyle(16, i < 3 ? TEXT_COLOR.white : TEXT_COLOR.ink)).setOrigin(0.5)
+
+                this.add.text(left + 42, y, String(s.name) + (isSelf ? "  (you)" : ""), textStyle(22, TEXT_COLOR.ink, isSelf))
+                    .setOrigin(0, 0.5)
+                this.add.text(right, y, String(s.scores?.[scoreIndex] ?? 0), textStyle(24)).setOrigin(1, 0.5)
+                y += STANDING_HEIGHT
+            })
+        }
+
+        new WoodButton(this, centerX, height - PANEL_MARGIN - 62, 240, 58, gameEnd ? "EXIT" : "NEXT ROUND",
+            () => this.onNext(), "wood", 24)
+
+        keepFitted(this, WIDTH, height, "center", pixelRatio() * 1.5)
     }
 
-    show() {
-        // score by rounds
-        for (let i = 0; i < 3; ++i) {
-            const roundScore = this.playerInfo.scores[i]?.toString()
-            if (roundScore) {
-                this.scoreZones[i].setText(roundScore)
-            } else {
-                this.scoreZones[i].setText("")
-            }
-        }
+    private scoreRow(g: Phaser.GameObjects.Graphics, left: number, right: number, y: number,
+                     badge: string, badgeColor: number, label: string, value: string, active: boolean) {
+        const alpha = active ? 1 : 0.45
 
-        if (this.playerInfo.gameEnd) {
-            this.scoreZones[ScoreZonesEnum.TOWN].setText(String(this.playerInfo.scores[ScoreZonesEnum.TOWN] ?? 0))
-            this.scoreZones[ScoreZonesEnum.TOTAL].setText(String(this.playerInfo.scores[ScoreZonesEnum.TOTAL] ?? 0))
+        g.fillStyle(badgeColor, alpha).fillCircle(left + 16, y, 16)
+        g.lineStyle(1.5, COLOR.wood, 0.8 * alpha).strokeCircle(left + 16, y, 16)
+        this.add.text(left + 16, y, badge, textStyle(badge.length > 2 ? 12 : 15, TEXT_COLOR.white)).setOrigin(0.5).setAlpha(alpha)
 
+        this.add.text(left + 46, y, label, textStyle(20)).setOrigin(0, 0.5).setLetterSpacing(2).setAlpha(alpha)
+        this.add.text(right, y, value, textStyle(30)).setOrigin(1, 0.5).setAlpha(alpha)
 
-            this.message.setText("GAME END")
-            this.next.setText("EXIT")
-        } else {
-            this.scoreZones[ScoreZonesEnum.TOWN].setText("")
-            this.scoreZones[ScoreZonesEnum.TOTAL].setText("")
-
-            this.message.setText(`ROUND ${this.playerInfo.round} COMPLETE`)
-            this.next.setText("NEXT")
+        // пунктирная направляющая между подписью и числом, как в листе очков
+        g.lineStyle(1, COLOR.wood, 0.3 * alpha)
+        for (let x = left + 200; x < right - 70; x += 10) {
+            g.lineBetween(x, y + 8, x + 4, y + 8)
         }
     }
 
     /**
-     * Таблица игроков: по итоговому счёту в конце игры, иначе по очкам последнего раунда
+     * По итоговому счёту в конце игры, иначе по очкам последнего раунда
      */
-    private standingsText(): string {
+    private sortedStandings(): StandingDto[] {
         const scoreIndex = this.playerInfo.gameEnd ? ScoreZonesEnum.TOTAL : this.playerInfo.round - 1
         const score = (s: StandingDto) => s.scores?.[scoreIndex] ?? 0
-
-        return [...this.standings]
-            .sort((a, b) => score(b) - score(a))
-            .map((s, i) => `${i + 1}. ${s.name}${s.memberId === this.selfId ? " (YOU)" : ""}  -  ${score(s)}`)
-            .join("\n")
+        return [...this.standings].sort((a, b) => score(b) - score(a))
     }
 
 

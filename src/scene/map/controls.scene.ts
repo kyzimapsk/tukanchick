@@ -9,23 +9,12 @@ import {TownLetters} from "../../enums/townLetters";
 import {ArtifactsEnum} from "../../enums/artifacts.enum";
 import {fitCamera, hudLayout, HudLayout} from "../../scale/screen";
 import {Point} from "../../entity/point";
+import {COLOR, FONT, hexPoints, TEXT_COLOR} from "../../ui/theme";
+import {WoodButton} from "../../ui/wood-button";
 
-// палитра поля игры: пергамент, коричневые чернила, акценты листа очков
-const COLOR = {
-    parchment: 0xf2e3c2,
-    parchmentDark: 0xe2cd9f,
-    wood: 0x6b4423,
-    woodLight: 0x8d5f35,
-    ink: 0x4a2f17,
-    orange: 0xf0962b,
-    green: 0x6fae3e,
-    red: 0xb3402a,
-    shadow: 0x000000,
-}
-const INK = "#4a2f17"
-const INK_SOFT = "#8a6a45"
-const PARCHMENT = "#f2e3c2"
-const FONT = 'Georgia, "Times New Roman", serif'
+const INK = TEXT_COLOR.ink
+const INK_SOFT = TEXT_COLOR.inkSoft
+const PARCHMENT = TEXT_COLOR.parchment
 
 const LANDMARKS: ArtifactsEnum[] = [
     ArtifactsEnum.OBELISK, ArtifactsEnum.BOOK, ArtifactsEnum.TUCAN, ArtifactsEnum.COALA, ArtifactsEnum.DRAGON,
@@ -65,15 +54,6 @@ function panelPositions(layout: HudLayout): PanelPositions {
         villages: {x: 655, y: 0},
         turn: {x: layout.width - 70, y: 0},
     }
-}
-
-function hexPoints(cx: number, cy: number, r: number): Phaser.Math.Vector2[] {
-    const points = []
-    for (let i = 0; i < 6; ++i) {
-        const angle = Phaser.Math.DegToRad(60 * i - 90)
-        points.push(new Phaser.Math.Vector2(cx + r * Math.cos(angle), cy + r * Math.sin(angle)))
-    }
-    return points
 }
 
 /**
@@ -132,7 +112,7 @@ export default class ControlsScene extends Phaser.Scene {
 
     private cards: Phaser.GameObjects.Image[]
 
-    private skipButton: { graphics: Phaser.GameObjects.Graphics, text: Phaser.GameObjects.Text, zone: Phaser.GameObjects.Zone, x: number, y: number, enabled: boolean, hover: boolean }
+    private skipButton: WoodButton
 
     private landmarkIcons: Map<ArtifactsEnum, Phaser.GameObjects.Image>
     private landmarkDots: Map<ArtifactsEnum, Phaser.GameObjects.Graphics>
@@ -251,40 +231,7 @@ export default class ControlsScene extends Phaser.Scene {
         this.turnText = this.add.text(p.x, p.y + 64, "1", {fontFamily: FONT, fontSize: "44px", fontStyle: "bold", color: INK})
             .setOrigin(0.5)
 
-        const x = p.x
-        const y = p.y + 118
-        const graphics = this.add.graphics()
-        const text = this.add.text(x, y, "SKIP", {fontFamily: FONT, fontSize: "20px", fontStyle: "bold", color: PARCHMENT})
-            .setOrigin(0.5).setLetterSpacing(2)
-        const zone = this.add.zone(x, y, 116, 40).setInteractive({useHandCursor: true})
-
-        this.skipButton = {graphics, text, zone, x, y, enabled: true, hover: false}
-
-        zone.on(Phaser.Input.Events.POINTER_OVER, () => this.drawSkip({hover: true}))
-        zone.on(Phaser.Input.Events.POINTER_OUT, () => this.drawSkip({hover: false}))
-        zone.on(Phaser.Input.Events.POINTER_UP, () => {
-            if (this.skipButton.enabled) {
-                EventBus.emit(EventsEnum.SKIP_TURN)
-            }
-        })
-        this.drawSkip({})
-    }
-
-    private drawSkip(state: { hover?: boolean, enabled?: boolean }) {
-        const b = this.skipButton
-        b.hover = state.hover ?? b.hover
-        b.enabled = state.enabled ?? b.enabled
-
-        const w = 112, h = 38
-        const fill = b.enabled && b.hover ? COLOR.woodLight : COLOR.wood
-
-        b.graphics.clear()
-            .fillStyle(COLOR.shadow, 0.3).fillRoundedRect(b.x - w / 2 + 1, b.y - h / 2 + 3, w, h, 10)
-            .fillStyle(fill, 1).fillRoundedRect(b.x - w / 2, b.y - h / 2, w, h, 10)
-            .lineStyle(2, 0xc89b62, 0.8).strokeRoundedRect(b.x - w / 2 + 3, b.y - h / 2 + 3, w - 6, h - 6, 8)
-
-        b.graphics.setAlpha(b.enabled ? 1 : 0.35)
-        b.text.setAlpha(b.enabled ? 1 : 0.5)
+        this.skipButton = new WoodButton(this, p.x, p.y + 118, 112, 38, "SKIP", () => EventBus.emit(EventsEnum.SKIP_TURN), "wood", 20)
     }
 
     private createCards(p: Point) {
@@ -386,12 +333,12 @@ export default class ControlsScene extends Phaser.Scene {
         })
 
         this.updateRoadCounter()
-        this.drawSkip({enabled: this.playerInfo.readyTouch})
+        this.skipButton.setEnabled(this.playerInfo.readyTouch)
     }
 
     private onMakeRoad() {
         this.updateRoadCounter()
-        this.drawSkip({enabled: this.playerInfo.readyTouch})
+        this.skipButton.setEnabled(this.playerInfo.readyTouch)
 
         this.cards.forEach((card) => card.setAlpha(0.4))
     }

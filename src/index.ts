@@ -21,7 +21,8 @@ const config = {
     type: Phaser.AUTO,
     parent,
     fullscreenTarget: parent,
-    backgroundColor: '#000000',
+    // тёмное дерево вокруг карты и меню вместо чёрного
+    backgroundColor: '#21160d',
     scene: [LoadScene, MainMenuScene, MapScene, ControlsScene, ScoreScene, LobbyScene],
     scale: scaleConfig(parent),
     input: {

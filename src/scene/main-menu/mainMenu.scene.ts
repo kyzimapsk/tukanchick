@@ -7,11 +7,16 @@ import {Image} from "../../controls/image";
 import {startSinglePlayer} from "../../index";
 import {LobbyConfig} from "../../entity/lobbyConfig";
 import {client} from "../../multiplayer/client";
-import {keepFitted} from "../../scale/screen";
+import {keepFitted, pixelRatio} from "../../scale/screen";
+import {COLOR, drawFrame, textStyle} from "../../ui/theme";
+import {WoodButton} from "../../ui/wood-button";
 
-// размер logo.jpg - виртуальное разрешение меню
-export const MENU_WIDTH = 880
-export const MENU_HEIGHT = 881
+// logo.jpg 880x881 в деревянной рамке - виртуальное разрешение меню (и лобби поверх него)
+const LOGO_WIDTH = 880
+const LOGO_HEIGHT = 881
+const BORDER = 30
+export const MENU_WIDTH = LOGO_WIDTH + BORDER * 2
+export const MENU_HEIGHT = LOGO_HEIGHT + BORDER * 2
 
 export default class MainMenuScene extends Phaser.Scene {
 
@@ -20,9 +25,7 @@ export default class MainMenuScene extends Phaser.Scene {
     petitButton: Button
     grandeButton: Button
 
-    multiplayerButton: Button
-
-    fullscreenButton: Button
+    multiplayerButton: WoodButton
 
     enableNet: boolean
 
@@ -33,18 +36,17 @@ export default class MainMenuScene extends Phaser.Scene {
         this.petitButton = new Button(this).preloadAtlasExtern(Assets.STAFF_IMAGE)
         this.grandeButton = new Button(this).preloadAtlasExtern(Assets.STAFF_IMAGE)
 
-        this.multiplayerButton = new Button(this).preloadExtern(Assets.SAND_1)
-        this.fullscreenButton = new Button(this).preloadExtern(Assets.SAND_1)
-
         this.enableNet = true
 
     }
 
     create() {
+        this.cameras.main.setBackgroundColor(COLOR.woodDark)
 
-        this.background.create(0, 0)
-        const width = MENU_WIDTH
-        const height = MENU_HEIGHT
+        drawFrame(this.add.graphics(), BORDER, BORDER, LOGO_WIDTH, LOGO_HEIGHT, 18)
+        this.background.create(BORDER, BORDER)
+
+        const centerX = MENU_WIDTH / 2
 
         let buttonWidth = 600 * 0.5
         let buttonHeight = 200 * 0.5
@@ -52,15 +54,15 @@ export default class MainMenuScene extends Phaser.Scene {
 
         // single
 
-        let petitButtonHeght = height * 0.3
-        this.petitButton.create(width * 0.5, petitButtonHeght,
+        let petitButtonHeght = BORDER + LOGO_HEIGHT * 0.3
+        this.petitButton.create(centerX, petitButtonHeght,
             null,
             () => startSinglePlayer(IslandEnum.PETIT)
         ).changeFrame('ISLA_PETIT').setDisplaySize(buttonWidth, buttonHeight)
             .setOrigin(0.5)
 
         let grandeButtonHeght = petitButtonHeght + buttonHeight + buttonSpace
-        this.grandeButton.create(width * 0.5, grandeButtonHeght,
+        this.grandeButton.create(centerX, grandeButtonHeght,
             null,
             () => startSinglePlayer(IslandEnum.GRANDE)
         ).changeFrame('ISLA_GRANDE').setDisplaySize(buttonWidth, buttonHeight)
@@ -68,37 +70,32 @@ export default class MainMenuScene extends Phaser.Scene {
 
 
         let multiplayerHeight = grandeButtonHeght + (buttonHeight + buttonSpace) * 2
-        this.multiplayerButton.create(width * 0.5, multiplayerHeight,
-            "MULTIPLAYER",
-            () => this.scene.launch(ScenesEnum.LOBBY, {parentWidth: width, parentHeight: height} as LobbyConfig)
-        ).setDisplaySize(buttonWidth, buttonHeight)
-            .setOrigin(0.5)
-            .setTextFont(30, "black", "bold")
-            .setDisable(true)
+        this.multiplayerButton = new WoodButton(this, centerX, multiplayerHeight, 280, 64, "MULTIPLAYER",
+            () => this.scene.launch(ScenesEnum.LOBBY, {parentWidth: MENU_WIDTH, parentHeight: MENU_HEIGHT} as LobbyConfig),
+            "wood", 28
+        ).setEnabled(false)
 
         if (this.sys.game.device.fullscreen.available) {
-            this.fullscreenButton.create(width - buttonSpace, buttonSpace,
-                "FULLSCREEN",
-                () => this.scale.toggleFullscreen()
-            ).setDisplaySize(150, 50)
-                .setOrigin(1, 0)
-                .setTextFont(20, "black", "bold")
+            new WoodButton(this, BORDER + LOGO_WIDTH - 90, BORDER + 32, 160, 42, "FULLSCREEN",
+                () => this.scale.toggleFullscreen(), "parchment", 16)
         }
 
         if (this.enableNet) {
             client
                 .connect()
                 .onOpen(() => {
-                    this.multiplayerButton.setDisable(false)
+                    this.multiplayerButton.setEnabled(true)
                 })
                 .onClose(() => {
-                    this.multiplayerButton.setDisable(true)
+                    this.multiplayerButton.setEnabled(false)
                 })
         }
 
 
-        this.add.text(0, 0, "ver " + APP_VERSION).setOrigin(0).setFontSize(20).setFontStyle('bold').setColor('white')
+        this.add.text(centerX, MENU_HEIGHT - BORDER / 2 + 1, "ver " + APP_VERSION, textStyle(13, "#c89b62"))
+            .setOrigin(0.5).setLetterSpacing(2)
 
-        keepFitted(this, width, height)
+        // картинка меню - растр 880x881: не растягиваем её крупнее родного размера, чтобы не мылилась
+        keepFitted(this, MENU_WIDTH, MENU_HEIGHT, "center", pixelRatio())
     }
 }
