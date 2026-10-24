@@ -107,11 +107,8 @@ export function fitCamera(scene: Phaser.Scene, width: number, height: number, al
 /**
  * fitCamera + автоматический пересчёт при изменении размера экрана
  */
-export function keepFitted(scene: Phaser.Scene, width: number, height: number, align: Align = "center", onResize?: () => void) {
-    const fit = () => {
-        fitCamera(scene, width, height, align)
-        onResize?.()
-    }
+export function keepFitted(scene: Phaser.Scene, width: number, height: number, align: Align = "center", maxZoom: number = Infinity) {
+    const fit = () => fitCamera(scene, width, height, align, maxZoom)
     fit()
 
     scene.scale.on(Phaser.Scale.Events.RESIZE, fit)
