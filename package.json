@@ -20,6 +20,7 @@
     "@types/ws": "^8.18.1",
     "copy-webpack-plugin": "^14.0.0",
     "html-webpack-plugin": "^5.6.3",
+    "phaser": "~3.90.0",
     "terser-webpack-plugin": "^5.3.14",
     "ts-loader": "^9.5.2",
     "typescript": "~5.9.3",
@@ -29,7 +30,6 @@
     "webpack-merge": "^6.0.1"
   },
   "dependencies": {
-    "phaser": "~3.90.0",
     "ws": "^8.18.3"
   }
 }

@@ -1,0 +1,23 @@
+services:
+  tukanchick:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    container_name: tukanchick
+    restart: unless-stopped
+    # наружу не публикуется: TLS и домен - на reverse proxy (Caddy)
+    ports:
+      - "127.0.0.1:5000:5000"
+    environment:
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://kyzimapsk.github.io}
+    mem_limit: 150m
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"

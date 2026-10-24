@@ -50,7 +50,15 @@ Workflow `.github/workflows/pages.yml` собирает клиент и публ
 
 Pages раздаёт только статику, поэтому там работает одиночная игра. Для мультиплеера сервер
 поднимается отдельно (`STATIC_DIR="" ALLOWED_ORIGINS=https://<user>.github.io npm run server`),
-а его адрес указывается в переменной репозитория `MULTIPLAYER_URL` (`wss://<host>/exchange`).
+а его адрес указывается в переменной репозитория `MULTIPLAYER_URL` (`wss://<host>/exchange`;
+по умолчанию - `wss://212-113-99-61.sslip.io/exchange`).
+
+Сервер на VPS запускается в Docker за reverse proxy с TLS:
+
+```bash
+git clone https://github.com/kyzimapsk/tukanchick.git && cd tukanchick
+docker compose -f server/docker-compose.yml up -d --build
+```
 
 ## Управление
 
