@@ -12,6 +12,7 @@ export enum EventsEnum {
     START_TURN = "START_TURN",
     START_TURN_AFTER = "START_TURN_AFTER",
     END_TURN = "END_TURN",
+    SKIP_TURN = "SKIP_TURN",
 
     MAKE_ROAD = "MAKE_ROAD",
     DRAW_ROAD = "DRAW_ROAD",
@@ -24,6 +25,12 @@ export enum EventsEnum {
 
 
     MESSAGE = "MESSAGE",
+
+    // строка состояния на панели управления (ожидание других игроков и т.п.)
+    STATUS = "STATUS",
+
+    // игрок закрыл экран очков
+    SCORE_CLOSED = "SCORE_CLOSED",
 
     CLOSE_GAME = "CLOSE_GAME",
 }

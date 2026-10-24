@@ -2,9 +2,9 @@ export interface Point {
     /**
      * The x component.
      */
-    x?: number;
+    x: number;
     /**
      * The y component.
      */
-    y?: number;
-};
+    y: number;
+}

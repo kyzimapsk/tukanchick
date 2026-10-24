@@ -1,5 +1,5 @@
-import {GroundsEnum} from "../../enums/grounds.enum";
-import {shuffleArray} from "./map.util";
+import {GroundsEnum} from "../enums/grounds.enum";
+import {shuffleArray} from "./random";
 
 
 export default class Deck {
@@ -26,11 +26,6 @@ export default class Deck {
             this.items.push(GroundsEnum.JOKER)
         }
 
-/*
-        for (let i = 0; i < 20; ++i) {
-            this.items.push(GroundsEnum.JOKER)
-        }*/
-
         shuffleArray(this.items)
     }
 
@@ -41,6 +36,13 @@ export default class Deck {
 
     public size() {
         return this.items.length
+    }
+
+    /**
+     * Раунд заканчивается, когда в колоде осталась одна карта
+     */
+    public isRoundOver() {
+        return this.items.length <= 1
     }
 
 }

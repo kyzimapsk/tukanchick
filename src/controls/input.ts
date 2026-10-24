@@ -37,8 +37,14 @@ export class Input {
 
     setText(text: string) {
         const inputElement = this.element?.node.firstElementChild as HTMLInputElement
-        inputElement.value = text
+        inputElement.value = text ?? ''
 
+        return this
+    }
+
+    setMaxLength(maxLength: number) {
+        const inputElement = this.element?.node.firstElementChild as HTMLInputElement
+        inputElement.maxLength = maxLength
         return this
     }
 

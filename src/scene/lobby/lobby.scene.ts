@@ -2,7 +2,8 @@ import * as Phaser from "phaser";
 import {ScenesEnum} from "../../enums/scenes.enum";
 import {Button} from "../../controls/button";
 import {Assets} from "../../assets";
-import {client, startMultiPlayer} from "../../index";
+import {startMultiPlayer} from "../../index";
+import {roundCountFor} from "../../game/board";
 import {LobbyConfig} from "../../entity/lobbyConfig";
 import {Input} from "../../controls/input";
 import {CommandsEnum} from "../../multiplayer/commands.enum";
@@ -11,11 +12,41 @@ import {EventBus} from "../bus/EventBus";
 import {EventsEnum} from "../../enums/events.enum";
 import {IslandEnum} from "../../enums/islands.enum";
 import {MapConfig} from "../../entity/mapConfig";
+import {client} from "../../multiplayer/client";
+import {
+    ErrorDto,
+    GameStateDto,
+    JoinToLobbyDto,
+    LOBBY_ID_LENGTH,
+    LobbyDto,
+    MemberDto,
+    NAME_MAX_LENGTH
+} from "../../multiplayer/protocol";
+import {keepFitted} from "../../scale/screen";
+
+const NICKNAME_KEY = 'user_nick_name'
+
+function loadNickname(): string {
+    try {
+        return localStorage.getItem(NICKNAME_KEY) || ''
+    } catch (e) {
+        return ''
+    }
+}
+
+function saveNickname(nick: string) {
+    try {
+        localStorage.setItem(NICKNAME_KEY, nick)
+    } catch (e) {
+        // приватный режим браузера - просто не запоминаем
+    }
+}
 
 export default class LobbyScene extends Phaser.Scene {
 
     config: LobbyConfig
 
+    nicknameLabel: Phaser.GameObjects.Text
     nicknameTextBox: Input
     commonCaptionText: Button
 
@@ -32,6 +63,8 @@ export default class LobbyScene extends Phaser.Scene {
     startPetitButton: Button
     startGrandeButton: Button
     exitButton: Button
+
+    selfId: number
 
     constructor() {
         super(ScenesEnum.LOBBY)
@@ -60,17 +93,19 @@ export default class LobbyScene extends Phaser.Scene {
     }
 
     create() {
+        this.selfId = undefined
 
         const centerX = this.config.parentWidth / 2
-        const leftX = 100
-        const topY = 100
+        const leftX = 40
+        const topY = 40
 
         const width = this.config.parentWidth - leftX * 2;
         const height = this.config.parentHeight - topY * 2;
 
         const botY = topY + height
 
-
+        // затемняет меню под лобби на любом размере экрана
+        this.add.rectangle(centerX, this.config.parentHeight / 2, 100000, 100000, 0x000000, 0.6)
         this.add.rectangle(this.config.parentWidth / 2, this.config.parentHeight / 2, width, height, 0x000000, 0.9).setOrigin(0.5, 0.5)
 
         let buttonSpace = 10
@@ -84,20 +119,19 @@ export default class LobbyScene extends Phaser.Scene {
         let nicknamePostY = topY + buttonSpace + buttonHeight / 2
 
 
-        this.add.text(leftColumnCenterX, nicknamePostY, "Nickname:").setFontSize(30).setFontStyle('bold').setOrigin(0.5)
+        this.nicknameLabel = this.add.text(leftColumnCenterX, nicknamePostY, "Nickname:").setFontSize(30).setFontStyle('bold').setOrigin(0.5)
 
         this.nicknameTextBox.create(rightColumnCenterX, nicknamePostY, buttonWidth, buttonHeight, 'white', 'gray').setOrigin(0.5)
-        this.nicknameTextBox.setText(localStorage.getItem('user_nick_name'))
+        this.nicknameTextBox.setMaxLength(NAME_MAX_LENGTH)
+        this.nicknameTextBox.setText(loadNickname())
 
-        this.nicknameTextBox.onChange = (newNick: string) => {
-            localStorage.setItem('user_nick_name', newNick)
-        }
+        this.nicknameTextBox.onChange = (newNick: string) => saveNickname(newNick)
 
 
         // common caption
         let commonCaptionPosY = nicknamePostY + buttonHeight + buttonSpace + buttonSpace
 
-        this.commonCaptionText.create(centerX, commonCaptionPosY, "CREATE LOBBY OR PUT LOBBY ID TO JOIN").setTextFont(30, 'white', 'bold').setOrigin(0.5)
+        this.commonCaptionText.create(centerX, commonCaptionPosY, "CREATE LOBBY OR PUT LOBBY ID TO JOIN").setTextFont(26, 'white', 'bold').setOrigin(0.5)
 
 
         // buttons create/join
@@ -125,6 +159,7 @@ export default class LobbyScene extends Phaser.Scene {
 
         this.joinLobbyCaptionText.create(leftColumnCenterX, textLobbyIdPosY, "JOIN TO ").setTextFont(30, 'white', 'bold').setOrigin(0.5)
         this.joinLobbyIdTextBox.create(rightColumnCenterX, textLobbyIdPosY, buttonWidth, buttonHeight, 'white', 'SlateGray').setOrigin(0.5)
+        this.joinLobbyIdTextBox.setMaxLength(LOBBY_ID_LENGTH)
 
         // party members
         let exitButtonPosY = botY - buttonHeight
@@ -132,7 +167,7 @@ export default class LobbyScene extends Phaser.Scene {
         let partyMemberTablePosY = textLobbyIdPosY + buttonHeight + buttonSpace
         let partyMemberTableHeight = exitButtonPosY - partyMemberTablePosY - buttonHeight
 
-        this.partyMemberTable.create(centerX, partyMemberTablePosY, width, partyMemberTableHeight).setOrigin(0.5, 0)
+        this.partyMemberTable.create(centerX, partyMemberTablePosY, width - buttonSpace * 2, partyMemberTableHeight).setOrigin(0.5, 0)
 
 
         let thirdWidth = width / 3
@@ -141,18 +176,18 @@ export default class LobbyScene extends Phaser.Scene {
 
         let startPetitCenterPosX = leftX + thirdWidth - thirdWidth / 2
         this.startPetitButton.create(startPetitCenterPosX, exitButtonPosY,
-            "START PETIT", () => this.startPetit()
+            "START PETIT", () => this.startGame(IslandEnum.PETIT)
         ).setDisplaySize(bottomButtonWidth, buttonHeight)
             .setOrigin(0.5)
-            .setTextFont(30, "black", "bold")
+            .setTextFont(26, "black", "bold")
             .setVisible(false)
 
         let startGrandeCenterPosX = leftX + thirdWidth * 2 - thirdWidth / 2
         this.startGrandeButton.create(startGrandeCenterPosX, exitButtonPosY,
-            "START GRANDE", () => this.startGrande()
+            "START GRANDE", () => this.startGame(IslandEnum.GRANDE)
         ).setDisplaySize(bottomButtonWidth, buttonHeight)
             .setOrigin(0.5)
-            .setTextFont(30, "black", "bold")
+            .setTextFont(26, "black", "bold")
             .setVisible(false)
 
         let exitCenterPosX = leftX + width - thirdWidth / 2
@@ -166,33 +201,53 @@ export default class LobbyScene extends Phaser.Scene {
         this.scene.pause(ScenesEnum.MAIN_MENU) // переделать на popup panel
 
 
-        client.onReceive(CommandsEnum.CREATE_LOBBY_SUCCESS, (data) => this.createLobbySuccess(data))
-        client.onReceive(CommandsEnum.JOIN_TO_LOBBY_SUCCESS, (data) => this.joinLobbySuccess(data))
-        client.onReceive(CommandsEnum.JOIN_PARTY_MEMBER_SUCCESS, (data) => this.joinPartyMemberSuccess(data))
-        client.onReceive(CommandsEnum.LEAVE_PARTY_MEMBER_SUCCESS, (data) => this.leavePartyMemberSuccess(data))
+        client.onReceive<LobbyDto>(CommandsEnum.CREATE_LOBBY_SUCCESS, (data) => this.createLobbySuccess(data))
+        client.onReceive<LobbyDto>(CommandsEnum.JOIN_TO_LOBBY_SUCCESS, (data) => this.joinLobbySuccess(data))
+        client.onReceive<LobbyDto>(CommandsEnum.JOIN_PARTY_MEMBER_SUCCESS, (data) => this.refreshLobbyMembers(data))
+        client.onReceive<LobbyDto>(CommandsEnum.LEAVE_PARTY_MEMBER_SUCCESS, (data) => this.refreshLobbyMembers(data))
         client.onReceive(CommandsEnum.CLOSE_LOBBY_SUCCESS, () => this.closeLobbySuccess())
-        client.onReceive(CommandsEnum.START_GAME_SUCCESS, (data) => this.startGameSuccess(data))
+        client.onReceive<LobbyDto>(CommandsEnum.START_GAME_SUCCESS, (data) => this.startGameSuccess(data))
+        client.onReceive<ErrorDto>(CommandsEnum.ERROR, (data) => this.showMessage(String(data.message)))
+
+        keepFitted(this, this.config.parentWidth, this.config.parentHeight)
     }
 
-    update() {
+    private nickname(): string | null {
+        const name = this.nicknameTextBox.getText().trim()
+        if (!name) {
+            this.showMessage("ENTER NICKNAME")
+            return null
+        }
+        return name
+    }
+
+    private showMessage(text: string) {
+        this.commonCaptionText.setText(text)
     }
 
     createLobby() {
-        const name = this.nicknameTextBox.getText()
-        client.send(CommandsEnum.CREATE_LOBBY, {name} as MemberDto)
+        const name = this.nickname()
+        if (name) {
+            client.send(CommandsEnum.CREATE_LOBBY, {name} as MemberDto)
+        }
     }
 
-    createLobbySuccess(lobbyDto: JoinToLobbyDto) {
+    createLobbySuccess(lobbyDto: LobbyDto) {
         this.createdLobbyIdText.setText(`HOST LOBBY ID: ${lobbyDto.lobbyId}`).setVisible(true)
-        this.disableControlsAfterJoin()
-        this.refreshLobbyMembers(lobbyDto)
+        this.onJoined(lobbyDto)
         this.enableHostControls()
-        this.createDirector()
     }
 
     joinLobby() {
-        const lobbyId = this.joinLobbyIdTextBox.getText()
-        const name = this.nicknameTextBox.getText()
+        const name = this.nickname()
+        const lobbyId = this.joinLobbyIdTextBox.getText().trim().toUpperCase()
+        if (!name) {
+            return
+        }
+        if (lobbyId.length != LOBBY_ID_LENGTH) {
+            this.showMessage("PUT LOBBY ID TO JOIN")
+            return
+        }
         client.send(CommandsEnum.JOIN_TO_LOBBY,
             {
                 lobbyId,
@@ -203,17 +258,17 @@ export default class LobbyScene extends Phaser.Scene {
 
     joinLobbySuccess(lobbyDto: LobbyDto) {
         this.createdLobbyIdText.setText(`JOIN SUCCESS: ${lobbyDto.lobbyId}`).setVisible(true)
+        this.onJoined(lobbyDto)
+        this.showMessage("WAITING FOR HOST TO START")
+    }
+
+    private onJoined(lobbyDto: LobbyDto) {
+        this.selfId = lobbyDto.you
         this.disableControlsAfterJoin()
         this.refreshLobbyMembers(lobbyDto)
-        this.createDirector()
-    }
-
-    joinPartyMemberSuccess(lobbyDto: LobbyDto) {
-        this.refreshLobbyMembers(lobbyDto)
-    }
-
-    leavePartyMemberSuccess(lobbyDto: LobbyDto) {
-        this.refreshLobbyMembers(lobbyDto)
+        this.nicknameLabel.setVisible(false)
+        this.nicknameTextBox.setVisible(false)
+        startMultiPlayer(this.selfId, this.nicknameTextBox.getText().trim())
     }
 
     closeLobbySuccess() {
@@ -221,14 +276,18 @@ export default class LobbyScene extends Phaser.Scene {
     }
 
     startGameSuccess(lobbyDto: LobbyDto) {
-        console.log('lobby startGame', lobbyDto)
-        EventBus.emit(EventsEnum.START_GAME, {island: lobbyDto.gameState.island, roundCount: lobbyDto.gameState.roundCount} as MapConfig)
+        const state = lobbyDto.gameState
+        EventBus.emit(EventsEnum.START_GAME, {
+            island: state.island,
+            roundCount: state.roundCount || roundCountFor(state.island),
+            townRoll: state.townRoll,
+        } as MapConfig)
     }
 
     enableHostControls() {
         this.startPetitButton.setVisible(true)
         this.startGrandeButton.setVisible(true)
-
+        this.showMessage("WAITING FOR PLAYERS")
     }
 
     disableControlsAfterJoin() {
@@ -241,19 +300,15 @@ export default class LobbyScene extends Phaser.Scene {
     refreshLobbyMembers(lobbyDto: LobbyDto) {
         const stringData: string[][] = []
 
-        lobbyDto.members.forEach((m) => {
+        lobbyDto.members?.forEach((m) => {
             const line: string[] = []
-            line.push(m.name)
-            line.push("READY")
+            line.push(String(m.name))
+            line.push([m.host ? "HOST" : "", m.memberId === this.selfId ? "YOU" : ""].filter(s => s).join(", "))
 
             stringData.push(line)
         })
 
         this.partyMemberTable.setData(stringData)
-    }
-
-    createDirector() {
-        startMultiPlayer(this)
     }
 
 
@@ -263,11 +318,7 @@ export default class LobbyScene extends Phaser.Scene {
         this.scene.resume(ScenesEnum.MAIN_MENU)
     }
 
-    startPetit() {
-        client.send(CommandsEnum.FORCE_START, {island: IslandEnum.PETIT} as GameStateDto)
-    }
-
-    startGrande() {
-        client.send(CommandsEnum.FORCE_START, {island: IslandEnum.GRANDE} as GameStateDto)
+    startGame(island: IslandEnum) {
+        client.send(CommandsEnum.FORCE_START, {island} as GameStateDto)
     }
 }

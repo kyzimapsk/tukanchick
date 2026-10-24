@@ -1,7 +1,6 @@
 import * as Phaser from "phaser";
 import {ScenesEnum} from "../../enums/scenes.enum";
 import {Button} from "../../controls/button";
-import MapScene from "./map.scene";
 import {EventsEnum} from "../../enums/events.enum";
 import {PlayerInfo} from "../../entity/playerInfo";
 import {Assets} from "../../assets";
@@ -11,12 +10,52 @@ import {Hexagon} from "../../entity/hexagon";
 import {TownLetters} from "../../enums/townLetters";
 import {ArtifactsEnum} from "../../enums/artifacts.enum";
 import {ControlsInfo} from "../../entity/controlsInfo";
+import {fitCamera, hudLayout, HudLayout} from "../../scale/screen";
+import {Point} from "../../entity/point";
+
+/**
+ * Позиции блоков панели в виртуальных координатах для широкого и узкого (портретного) экрана
+ */
+interface PanelPositions {
+    grounds: Point[]
+    deck: Point
+    // точка, от которой откладываются смещения из controls.info.json
+    artifacts: Point
+    towns: Point
+    status: Point
+    bonusRoad: Point
+}
+
+function panelPositions(layout: HudLayout): PanelPositions {
+    const centerX = layout.width / 2
+
+    if (layout.narrow) {
+        return {
+            grounds: [{x: centerX - 60, y: 5}, {x: centerX + 60, y: 5}],
+            deck: {x: centerX, y: 125},
+            artifacts: {x: 30, y: 175},
+            towns: {x: 360, y: 175},
+            status: {x: centerX, y: 340},
+            bonusRoad: {x: centerX, y: 100},
+        }
+    }
+    return {
+        grounds: [{x: centerX - 70, y: 5}, {x: centerX + 70, y: 5}],
+        deck: {x: centerX, y: 125},
+        artifacts: {x: 100, y: 10},
+        towns: {x: 660, y: 10},
+        status: {x: centerX, y: 180},
+        bonusRoad: {x: centerX, y: 100},
+    }
+}
+
+// смещения в controls.info.json заданы относительно центра панели шириной 1000
+const ARTIFACTS_OFFSET_X = 400
+const TOWNS_OFFSET_X = -200
 
 export default class ControlsScene extends Phaser.Scene {
 
     playerInfo: PlayerInfo
-
-    back: Image
 
     groundA: Image
     groundB: Image
@@ -32,14 +71,20 @@ export default class ControlsScene extends Phaser.Scene {
     deckSizeCount: Button
     turnCount: Button
 
+    skipButton: Button
+
+    statusText: Phaser.GameObjects.Text
+
+    statusMessage: string = ""
+
     artifactZones: Map<string, Image>
 
     controlsInfo: ControlsInfo
 
+    layout: HudLayout
+
     constructor() {
         super(ScenesEnum.MAP_CONTROLS)
-
-        this.back = new Image(this).preloadExtern(Assets.SAND_1)
 
         this.groundA = new Image(this).preloadAtlasExtern(Assets.GROUNDS_IMAGE)
         this.groundB = new Image(this).preloadAtlasExtern(Assets.GROUNDS_IMAGE)
@@ -54,6 +99,8 @@ export default class ControlsScene extends Phaser.Scene {
         this.roundCount = new Button(this).preloadExtern(Assets.SAND_1)
         this.deckSizeCount = new Button(this)
         this.turnCount = new Button(this).preloadExtern(Assets.SAND_1)
+
+        this.skipButton = new Button(this).preloadExtern(Assets.SAND_1)
 
         this.artifactZones = new Map()
 
@@ -71,33 +118,42 @@ export default class ControlsScene extends Phaser.Scene {
     }
 
     preload() {
-        this.playerInfo = this.scene.settings.data as PlayerInfo
+        const playerInfo = this.scene.settings.data as PlayerInfo
+        if (playerInfo !== this.playerInfo) {
+            // новая игра
+            this.statusMessage = ""
+        }
+        this.playerInfo = playerInfo
     }
 
     create() {
+        const {width: screenWidth, height: screenHeight} = this.scale.gameSize
+        this.layout = hudLayout(screenWidth, screenHeight)
 
+        const panelWidth = this.layout.width
+        const panelHeight = this.layout.height
+        const positions = panelPositions(this.layout)
 
-        const controlPanelWidth = this.sys.game.canvas.width;
-        const controlPanelHeight = 150
-
-        const centerX = controlPanelWidth / 2;
-
-        this.back.create(0, 0).setDisplaySize(controlPanelWidth, controlPanelHeight).setAlphaImage(0.8)
+        // фон тянется на всю ширину экрана при любом соотношении сторон
+        this.add.rectangle(panelWidth / 2, 0, 100000, panelHeight, 0xe6cf98, 0.85).setOrigin(0.5, 0)
 
         this.roundLabel.create(0, 0, "ROUND").setDisplaySize(80, 50).setTextFont(20, "black")
         this.roundCount.create(0, 50, "ROUND_COUNT").setDisplaySize(80, 50).setTextFont(40, "black")
 
-        this.nextTurnLabel.create(controlPanelWidth, 0, "END-TURN")
+        this.nextTurnLabel.create(panelWidth, 0, "TURN")
             .setOrigin(1, 0).setDisplaySize(100, 50).setTextFont(20, "red")
-        this.turnCount.create(controlPanelWidth, 50, "TURN")
+        this.turnCount.create(panelWidth, 50, "TURN")
             .setOrigin(1, 0).setDisplaySize(100, 50).setTextFont(40, "red")
 
-        this.deckSizeCount.create(centerX, 0, "_")
-            .setOrigin(0.5, 0).setTextFont(40, "green", "bold")
+        this.skipButton.create(panelWidth, 105, "SKIP", () => EventBus.emit(EventsEnum.SKIP_TURN))
+            .setOrigin(1, 0).setDisplaySize(100, 45).setTextFont(26, "black", "bold")
+
+        this.deckSizeCount.create(positions.deck.x, positions.deck.y, "_")
+            .setOrigin(0.5, 0).setTextFont(32, "green", "bold")
 
 
-        this.groundA.createAtlas(centerX - 100, 0).setDisplaySize(200, 234).setOrigin(0.5, 0).imageGO.setScale(0.5)
-        this.groundB.createAtlas(centerX + 100, 0).setDisplaySize(200, 234).setOrigin(0.5, 0).imageGO.setScale(0.5)
+        this.groundA.createAtlas(positions.grounds[0].x, positions.grounds[0].y).setOrigin(0.5, 0).imageGO.setScale(0.5)
+        this.groundB.createAtlas(positions.grounds[1].x, positions.grounds[1].y).setOrigin(0.5, 0).imageGO.setScale(0.5)
 
         this.controlsInfo = this.cache.json.get(Assets.CONTROLS_INFO)
 
@@ -105,71 +161,93 @@ export default class ControlsScene extends Phaser.Scene {
             for (let p = 0; p < a.points.length; ++p) {
                 const key: string = a.artifact.toString() + p.toString()
                 const img = this.artifactZones.get(key)
-                img.createAtlas(centerX + a.points[p].x, a.points[p].y, a.artifact)
+                img.createAtlas(positions.artifacts.x + ARTIFACTS_OFFSET_X + a.points[p].x, positions.artifacts.y + a.points[p].y, a.artifact)
                     .imageGO.setScale(0.4).setVisible(false)
             }
         }
         for (const t of this.controlsInfo.towns) {
             const img = this.artifactZones.get(t.letter)
-            img.createAtlas(centerX + t.point.x, t.point.y, "TOWN_" + t.letter)
+            img.createAtlas(positions.towns.x + TOWNS_OFFSET_X + t.point.x, positions.towns.y + t.point.y, "TOWN_" + t.letter)
                 .imageGO.setScale(0.4).setVisible(false)
 
         }
 
+        this.statusText = this.add.text(positions.status.x, positions.status.y, this.statusMessage)
+            .setOrigin(0.5, 0.5).setFontSize(22).setFontStyle('bold')
+            .setColor("#ffffff").setStroke("#000000", 4)
 
-        this.bonusRoad.create(centerX, 100, '_').setOrigin(0.5, 0.5)
-            .setDisplaySize(500, 100).setTextFont(80, "blue")
+        this.bonusRoad.create(positions.bonusRoad.x, positions.bonusRoad.y, '_').setOrigin(0.5, 0.5)
+            .setDisplaySize(440, 90).setTextFont(60, "blue")
             .setAlphaImage(0.5).setVisible(false)
 
-        this.artifactSplash.createAtlas(centerX, controlPanelHeight + 20).setOrigin(0.5, 0)
+        this.artifactSplash.createAtlas(panelWidth / 2, panelHeight + 20).setOrigin(0.5, 0)
             .setVisible(false)
 
-        const messages = this.add.text(0, 500, "").setFontSize(80).setFontStyle('bold').setColor("RED")
 
+        EventBus.onScene(this, EventsEnum.START_ROUND_AFTER, this.onStartTurn)
+        EventBus.onScene(this, EventsEnum.START_TURN_AFTER, this.onStartTurn)
+        EventBus.onScene(this, EventsEnum.MAKE_ROAD_AFTER, this.onMakeRoad)
 
-        EventBus.on(EventsEnum.START_ROUND_AFTER, this.onStartTurn, this)
-        // EventBus.on(EventsEnum.END_ROUND_AFTER, this.updateScore, this)
-        EventBus.on(EventsEnum.START_TURN_AFTER, this.onStartTurn, this)
-        EventBus.on(EventsEnum.MAKE_ROAD_AFTER, this.onMakeRoad, this)
-
-        EventBus.on(EventsEnum.CONNECT_ARTIFACT, this.onConnectArtifact, this)
-        EventBus.on(EventsEnum.CONNECT_TOWN, this.onConnectTown, this)
-        EventBus.on(EventsEnum.BONUS_ROAD, this.updateRoadCounter, this)
-
-        let number = 0
-        let messageLog = ''
-        EventBus.on(EventsEnum.MESSAGE, (msg: string) => {
-            messageLog = number + " " + msg + "\n" + messageLog
-            number++
-            messages.setText(messageLog.split("\n").slice(0, 10))
-        }, this)
+        EventBus.onScene(this, EventsEnum.CONNECT_ARTIFACT, this.onConnectArtifact)
+        EventBus.onScene(this, EventsEnum.CONNECT_TOWN, this.onConnectTown)
+        EventBus.onScene(this, EventsEnum.BONUS_ROAD, this.updateRoadCounter)
+        EventBus.onScene(this, EventsEnum.STATUS, this.setStatus)
 
         this.onStartTurn();
+        if (!this.playerInfo.readyTouch) {
+            this.onMakeRoad()
+        }
+        this.refreshConnected()
+
+        this.fit()
+        this.scale.on(Phaser.Scale.Events.RESIZE, this.onResize, this)
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this))
+    }
+
+    private onResize() {
+        const {width, height} = this.scale.gameSize
+        if (hudLayout(width, height).narrow !== this.layout.narrow) {
+            // сменилась ориентация экрана - пересобираем панель в другой раскладке
+            this.scene.restart(this.playerInfo)
+        } else {
+            this.fit()
+        }
+    }
+
+    private fit() {
+        const {width, height} = this.scale.gameSize
+        this.layout = hudLayout(width, height)
+        fitCamera(this, this.layout.width, this.layout.height, "top", this.layout.zoom)
     }
 
     private onStartTurn() {
 
-        this.turnCount.textGO.text = this.playerInfo.turn.toString()
+        this.turnCount.setText(this.playerInfo.turn.toString())
 
-        this.groundA.changeFrame(this.playerInfo.groundA)
-        this.groundB.changeFrame(this.playerInfo.groundB)
+        if (this.playerInfo.groundA) {
+            this.groundA.changeFrame(this.playerInfo.groundA).setVisible(true)
+            this.groundB.changeFrame(this.playerInfo.groundB).setVisible(true)
+        } else {
+            this.groundA.setVisible(false)
+            this.groundB.setVisible(false)
+        }
 
         this.updateRoundCount()
         this.updateRoadCounter()
-
-        //this.updateScore()
+        this.updateSkip()
     }
 
     private onMakeRoad() {
         this.updateRoadCounter()
+        this.updateSkip()
 
-        this.groundA.imageGO.setAlpha(0.5)
-        this.groundB.imageGO.setAlpha(0.5)
+        this.groundA.setAlphaImage(0.5)
+        this.groundB.setAlphaImage(0.5)
     }
 
 
     private updateRoundCount() {
-        this.roundCount.textGO.text = this.playerInfo.round.toString()
+        this.roundCount.setText(this.playerInfo.round.toString())
 
     }
 
@@ -180,9 +258,33 @@ export default class ControlsScene extends Phaser.Scene {
         this.bonusRoad.setVisible(this.playerInfo.bonusRoad > 0)
     }
 
+    private updateSkip() {
+        this.skipButton.setDisable(!this.playerInfo.readyTouch)
+    }
+
+    private setStatus(message: string) {
+        this.statusMessage = message || ""
+        this.statusText?.setText(this.statusMessage)
+    }
+
+    /**
+     * Отметки соединённых артефактов и городов строятся по состоянию игрока,
+     * поэтому одновременное соединение нескольких артефактов одного типа тоже отображается верно
+     */
+    private refreshConnected() {
+        this.controlsInfo.artifacts.forEach((a) => {
+            const count = this.playerInfo.artifactConnected.get(a.artifact) || 0
+            for (let p = 0; p < a.points.length; ++p) {
+                this.artifactZones.get(a.artifact.toString() + p.toString())?.setVisible(p < count)
+            }
+        })
+        this.controlsInfo.towns.forEach((t) => {
+            this.artifactZones.get(t.letter)?.setVisible(this.playerInfo.townLetterConnected.has(t.letter))
+        })
+    }
+
     private onConnectArtifact(hex: Hexagon) {
-        const connectedNumber = this.playerInfo.artifactConnected.get(hex.artifact) - 1
-        this.artifactZones.get(hex.artifact + connectedNumber).setVisible(true) // !!!
+        this.refreshConnected()
 
         this.artifactSplash.changeFrame(hex.artifact).setAlphaImage(1).setVisible(true)
 
@@ -192,7 +294,7 @@ export default class ControlsScene extends Phaser.Scene {
 
     private onConnectTown(townHexes: Hexagon[]) {
         const letter = townHexes[0].townLetter
-        this.artifactZones.get(letter).setVisible(true)
+        this.refreshConnected()
 
         this.artifactSplash.changeFrame(`TOWN_${letter}`).setAlphaImage(1).setVisible(true)
 

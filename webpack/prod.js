@@ -5,12 +5,12 @@ const TerserPlugin = require("terser-webpack-plugin");
 module.exports = merge(base, {
   mode: "production",
   output: {
-    filename: "bundle.min.js"
+    filename: "bundle.[contenthash].min.js"
   },
   devtool: false,
   performance: {
-    maxEntrypointSize: 900000,
-    maxAssetSize: 900000
+    maxEntrypointSize: 2000000,
+    maxAssetSize: 2000000
   },
   optimization: {
     minimizer: [

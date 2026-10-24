@@ -1,32 +1,35 @@
 {
   "name": "tukanchick",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Web port for board game: Trails of Tucana",
   "license": "MIT",
-  "main": "src/index.js",
+  "private": true,
   "scripts": {
-    "build": "webpack --config webpack/prod.js ",
-    "start": "webpack-dev-server --config webpack/base.js --open"
+    "build": "webpack --config webpack/prod.js",
+    "start": "webpack serve --config webpack/base.js --open",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
+    "server:build": "tsc -p server/tsconfig.json",
+    "server": "node server/dist/server/src/index.js",
+    "serve": "npm run build && npm run server:build && npm run server"
+  },
+  "engines": {
+    "node": ">=22.15"
   },
   "devDependencies": {
-    "@babel/cli": "^7.16.7",
-    "@babel/core": "^7.16.7",
-    "@babel/preset-env": "^7.16.7",
-    "babel-loader": "^8.2.3",
-    "clean-webpack-plugin": "^4.0.0",
-    "copy-webpack-plugin": "^10.2.0",
-    "file-loader": "^6.2.0",
-    "html-webpack-plugin": "^5.5.0",
-    "raw-loader": "^4.0.2",
-    "terser-webpack-plugin": "^5.3.0",
-    "ts-loader": "^9.2.6",
-    "typescript": "^4.5.4",
-    "webpack": "^5.74.0",
-    "webpack-cli": "^4.10.0",
-    "webpack-dev-server": "^4.7.2",
-    "webpack-merge": "^5.8.0"
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.1",
+    "copy-webpack-plugin": "^14.0.0",
+    "html-webpack-plugin": "^5.6.3",
+    "terser-webpack-plugin": "^5.3.14",
+    "ts-loader": "^9.5.2",
+    "typescript": "~5.9.3",
+    "webpack": "^5.101.0",
+    "webpack-cli": "^7.2.3",
+    "webpack-dev-server": "^6.1.0",
+    "webpack-merge": "^6.0.1"
   },
   "dependencies": {
-    "phaser": "^3.55.2"
+    "phaser": "~3.90.0",
+    "ws": "^8.18.3"
   }
 }

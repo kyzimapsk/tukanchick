@@ -1,9 +1,9 @@
-import {getRandom, shuffleArray} from "./map.util";
-import {TownLetters} from "../../enums/townLetters";
+import {getRandom} from "./random";
+import {TownLetters} from "../enums/townLetters";
 
 export default class TownSpawner {
 
-    rolls: string[] = [
+    static readonly ROLLS: string[] = [
         'ADCBDACEBE',
         'DCEADCBAEB',
         'ECAEBDABDC',
@@ -21,25 +21,20 @@ export default class TownSpawner {
 
     items: TownLetters[]
 
-    constructor() {
-
+    /**
+     * @param rollIndex номер раскладки городов; в мультиплеере выбирается сервером, чтобы у всех она совпадала
+     */
+    constructor(rollIndex: number = TownSpawner.randomRoll()) {
+        const roll = TownSpawner.ROLLS[rollIndex] ?? TownSpawner.ROLLS[0]
 
         this.items = []
-
-        const roll = this.rolls[getRandom(this.rolls.length)]
-
         for (let i = 0; i < roll.length; ++i) {
             this.items.push(roll.charAt(i) as TownLetters)
         }
+    }
 
-        /*
-        for (let letter in TownLetters) {
-            this.items.push(letter as TownLetters)
-            this.items.push(letter as TownLetters)
-        }
-
-        shuffleArray(this.items)
-        */
+    static randomRoll(): number {
+        return getRandom(TownSpawner.ROLLS.length)
     }
 
     public getByNumber(n: number): TownLetters {

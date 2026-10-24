@@ -4,8 +4,6 @@ export class Table {
 
     element: DOMElement
 
-    onChange: Function
-
     constructor(protected scene: Phaser.Scene) {
 
     }
@@ -16,20 +14,14 @@ export class Table {
 
     create(x: number, y: number, width: number, height: number) {
         const style = `
-        width: ${width}px; height: ${height}px; 
+        width: ${width}px; max-height: ${height}px;
         border: 1px solid white;
+        border-collapse: collapse;
         color:white;
+        font-size: 28px;
         `
 
-        // это div содеражщий в себе input
-        this.element = this.scene.add.dom(x, y).createFromHTML(` <table style="${style}"></table>`).setOrigin(0, 0);
-
-        this.element.addListener('input')
-        this.element.on('input', (e: any) => {
-            if (this.onChange) {
-                this.onChange(e.target.value)
-            }
-        })
+        this.element = this.scene.add.dom(x, y).createFromHTML(`<table style="${style}"></table>`).setOrigin(0, 0);
 
         return this
     }
@@ -47,6 +39,8 @@ export class Table {
 
                 cell.style.border = "1px solid white"
                 cell.style.color = "white"
+                cell.style.padding = "4px 8px"
+                cell.style.height = "40px"
 
             }
         }

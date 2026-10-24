@@ -1,119 +1,185 @@
 import * as Phaser from "phaser";
 import Pointer = Phaser.Input.Pointer;
-import {Point} from "../../entity/point";
+import {hudLayout} from "../../scale/screen";
 
+/**
+ * Камера карты:
+ *  - карта вписывается в область под панелью управления;
+ *  - колесо мыши - зум к курсору;
+ *  - правая/средняя кнопка мыши или два пальца - перемещение;
+ *  - щипок двумя пальцами - зум вокруг центра жеста.
+ */
 export default class MapCamera {
-
-    downScale: Point[] = []
-    currScale: Point[] = []
-
-    downZoom: number;
 
     dragging: boolean = false;
 
     minZoom: number;
     maxZoom: number;
 
-    constructor(private scene: Phaser.Scene, mapWidth: number, mapHeight: number) {
+    private camera: Phaser.Cameras.Scene2D.Camera
 
-        const canvasWidth = scene.sys.game.canvas.width;
-        const canvasHeight = scene.sys.game.canvas.height;
+    // перетаскивание мышью
+    private dragStart: { x: number, y: number, scrollX: number, scrollY: number } = null
 
-        this.minZoom = Math.min(canvasHeight / mapHeight, canvasWidth / mapWidth)
-        this.maxZoom = Math.min(mapHeight / canvasHeight, mapWidth / canvasWidth)
+    // жест двумя пальцами
+    private pinchStart: { distance: number, zoom: number, worldX: number, worldY: number } = null
 
+    constructor(private scene: Phaser.Scene, private mapWidth: number, private mapHeight: number) {
 
-        const camera = scene.cameras.main;
+        this.camera = scene.cameras.main
 
-        camera.setBounds(0, 0, mapWidth, mapHeight)
-        camera.zoom = 0.7
+        scene.input.mouse?.disableContextMenu()
 
-        let beforeX = 0
-        let beforeY = 0
+        this.fit(true)
 
-        let downX = 0
-        let downY = 0
+        const onResize = () => this.fit(false)
+        scene.scale.on(Phaser.Scale.Events.RESIZE, onResize)
+        scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => scene.scale.off(Phaser.Scale.Events.RESIZE, onResize))
 
-
-        let touchCount: number = 0;
-
-
-        scene.input.on("pointerdown", (pointer: Pointer) => {
-
-            touchCount++
-            this.downZoom = camera.zoom
-            this.downScale[pointer.id] = {x: pointer.x, y: pointer.y}
-
-            if (pointer.middleButtonDown() || touchCount >= 2) {//|| pointer.id == 2
-                this.dragging = true
-
-                downX = pointer.x
-                downY = pointer.y
-
-                beforeX = camera.scrollX
-                beforeY = camera.scrollY
-            }
-
-        })
-        scene.input.on("pointermove", (pointer: any) => {
-            if (this.dragging) {
-                if (pointer.isDown) {
-
-                    this.currScale[pointer.id] = {x: pointer.x, y: pointer.y}
-                    if (pointer.id != 2) {
-                        camera.scrollX = beforeX - pointer.x + downX
-                        camera.scrollY = beforeY - pointer.y + downY
-                    }
-                    this.scaleByTouch()
-
-                } else {
-                    this.dragging = false
-                    touchCount = 0
-                }
-            }
-        })
-        scene.input.on("pointerup", (pointer: Pointer) => {
-            this.dragging = false
-            touchCount = 0
-        })
-        scene.input.on('wheel', (pointer: Pointer, currentlyOver: any, dx: any, dy: any, dz: any, event: any) => {
-            this.scaleByScroll(dy)
+        scene.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Pointer) => this.onPointerDown(pointer))
+        scene.input.on(Phaser.Input.Events.POINTER_MOVE, (pointer: Pointer) => this.onPointerMove(pointer))
+        scene.input.on(Phaser.Input.Events.POINTER_UP, () => this.onPointerUp())
+        scene.input.on(Phaser.Input.Events.POINTER_UP_OUTSIDE, () => this.onPointerUp())
+        scene.input.on(Phaser.Input.Events.POINTER_WHEEL, (pointer: Pointer, over: any, dx: number, dy: number) => {
+            this.zoomAt(this.camera.zoom * Math.exp(-dy * 0.0015), pointer.x, pointer.y)
         });
     }
 
+    /**
+     * Пересчитывает область вывода и пределы зума под текущий размер экрана
+     */
+    fit(reset: boolean) {
+        const {width, height} = this.scene.scale.gameSize
+        const top = Math.min(hudLayout(width, height).screenHeight, height - 1)
 
-    scaleByTouch() {
-        if (this.downScale[1]?.x && this.currScale[1]?.x&& this.currScale[2]?.x) {
+        const center = this.toWorld(this.camera.x + this.camera.width / 2, this.camera.y + this.camera.height / 2)
 
-            const a = this.calcGipp(this.currScale)
-            const b = this.calcGipp(this.downScale)
-            const diff = a - b
+        this.camera.setViewport(0, top, width, height - top)
 
+        // минимум - карта видна целиком; максимум - заметно крупнее родного размера картинки
+        this.minZoom = Math.min(this.camera.width / this.mapWidth, this.camera.height / this.mapHeight)
+        this.maxZoom = Math.max(this.minZoom * 1.01, 2)
 
-            this.setZoom(this.downZoom + diff * 0.001)
+        if (reset) {
+            this.setZoom(this.minZoom)
+            this.camera.centerOn(this.mapWidth / 2, this.mapHeight / 2)
+        } else {
+            this.setZoom(this.camera.zoom)
+            this.camera.centerOn(center.x, center.y)
         }
     }
 
-    scaleByScroll(dy: number) {
-        const camera = this.scene.cameras.main;
-        this.setZoom(camera.zoom - dy * 0.001)
-    }
-
     setZoom(newZoom: number) {
-        newZoom = newZoom > this.maxZoom ? this.maxZoom : newZoom
-        newZoom = newZoom < this.minZoom ? this.minZoom : newZoom
-        this.scene.cameras.main.zoom = newZoom
+        newZoom = Phaser.Math.Clamp(newZoom, this.minZoom, this.maxZoom)
+        this.camera.setZoom(newZoom)
+        this.updateBounds()
     }
 
-    calcGipp(points: Point[]) {
-        const a = points[1].x - points[2].x
-        const b = points[1].y - points[2].y
+    /**
+     * Зум с сохранением точки карты под экранной координатой (x, y)
+     */
+    zoomAt(newZoom: number, x: number, y: number) {
+        const before = this.toWorld(x, y)
+        this.setZoom(newZoom)
+        const after = this.toWorld(x, y)
 
-        return Math.sqrt(a * a + b * b)
+        this.camera.scrollX += before.x - after.x
+        this.camera.scrollY += before.y - after.y
+    }
+
+    /**
+     * Экранные координаты -> координаты карты.
+     * Camera.getWorldPoint использует матрицу прошлого кадра и врёт сразу после setZoom.
+     */
+    private toWorld(x: number, y: number) {
+        const c = this.camera
+        return {
+            x: (x - c.x - c.width / 2) / c.zoom + c.scrollX + c.width / 2,
+            y: (y - c.y - c.height / 2) / c.zoom + c.scrollY + c.height / 2,
+        }
     }
 
     getDragging() {
         return this.dragging
+    }
+
+    /**
+     * Если карта меньше экрана - расширяем границы, чтобы она стояла по центру, а не прилипала к краю
+     */
+    private updateBounds() {
+        const visibleWidth = this.camera.width / this.camera.zoom
+        const visibleHeight = this.camera.height / this.camera.zoom
+
+        const padX = Math.max(0, (visibleWidth - this.mapWidth) / 2)
+        const padY = Math.max(0, (visibleHeight - this.mapHeight) / 2)
+
+        this.camera.setBounds(-padX, -padY, this.mapWidth + padX * 2, this.mapHeight + padY * 2)
+    }
+
+    private activeTouches(): Pointer[] {
+        const input = this.scene.input
+        return [input.pointer1, input.pointer2].filter((p) => p?.isDown)
+    }
+
+    private onPointerDown(pointer: Pointer) {
+        const touches = this.activeTouches()
+
+        if (touches.length >= 2) {
+            this.dragging = true
+            this.dragStart = null
+
+            const [a, b] = touches
+            const midX = (a.x + b.x) / 2
+            const midY = (a.y + b.y) / 2
+            const world = this.toWorld(midX, midY)
+
+            this.pinchStart = {
+                distance: Math.max(Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y), 1),
+                zoom: this.camera.zoom,
+                worldX: world.x,
+                worldY: world.y,
+            }
+        } else if (pointer.rightButtonDown() || pointer.middleButtonDown()) {
+            this.dragging = true
+            this.dragStart = {x: pointer.x, y: pointer.y, scrollX: this.camera.scrollX, scrollY: this.camera.scrollY}
+        }
+    }
+
+    private onPointerMove(pointer: Pointer) {
+        if (this.pinchStart) {
+            const touches = this.activeTouches()
+            if (touches.length < 2) {
+                return
+            }
+            const [a, b] = touches
+            const distance = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y)
+            const midX = (a.x + b.x) / 2
+            const midY = (a.y + b.y) / 2
+
+            this.setZoom(this.pinchStart.zoom * distance / this.pinchStart.distance)
+
+            // точка карты, бывшая под центром жеста, остаётся под ним - это даёт и зум, и перемещение
+            const world = this.toWorld(midX, midY)
+            this.camera.scrollX += this.pinchStart.worldX - world.x
+            this.camera.scrollY += this.pinchStart.worldY - world.y
+
+        } else if (this.dragStart && pointer.isDown) {
+            this.camera.scrollX = this.dragStart.scrollX - (pointer.x - this.dragStart.x) / this.camera.zoom
+            this.camera.scrollY = this.dragStart.scrollY - (pointer.y - this.dragStart.y) / this.camera.zoom
+        }
+    }
+
+    private onPointerUp() {
+        if (this.activeTouches().length < 2) {
+            this.pinchStart = null
+        }
+
+        const anyDown = this.scene.input.manager.pointers.some((p) => p.isDown)
+        if (!anyDown) {
+            this.dragging = false
+            this.dragStart = null
+            this.pinchStart = null
+        }
     }
 
 }

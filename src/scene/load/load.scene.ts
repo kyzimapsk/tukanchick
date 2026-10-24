@@ -1,6 +1,10 @@
 import * as Phaser from "phaser";
 import {ScenesEnum} from "../../enums/scenes.enum";
 import {Assets} from "../../assets";
+import {keepFitted} from "../../scale/screen";
+
+const WIDTH = 600
+const HEIGHT = 200
 
 export default class LoadScene extends Phaser.Scene {
 
@@ -9,7 +13,13 @@ export default class LoadScene extends Phaser.Scene {
     }
 
     preload() {
-        this.add.text(0, 0, "LOADING...").setOrigin(0).setFontSize(20).setFontStyle('bold').setColor('red')
+        this.add.text(WIDTH / 2, 60, "LOADING...").setOrigin(0.5).setFontSize(40).setFontStyle('bold').setColor('red')
+
+        this.add.rectangle(WIDTH / 2, 130, 400, 24).setStrokeStyle(2, 0xffffff)
+        const bar = this.add.rectangle(WIDTH / 2 - 198, 130, 0, 20, 0xffffff).setOrigin(0, 0.5)
+        this.load.on(Phaser.Loader.Events.PROGRESS, (value: number) => bar.width = 396 * value)
+
+        keepFitted(this, WIDTH, HEIGHT)
 
         // images
         this.load.image(Assets.MENU_LOGO, Assets.MENU_LOGO);
@@ -30,10 +40,6 @@ export default class LoadScene extends Phaser.Scene {
     }
 
     create() {
-        this.scene.stop(ScenesEnum.LOAD_SCREEN)
         this.scene.start(ScenesEnum.MAIN_MENU)
-    }
-
-    update() {
     }
 }

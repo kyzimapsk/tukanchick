@@ -11,13 +11,12 @@ import {ArtifactMapZone} from "../../entity/artifactMapZone";
 import {MapInfo} from "../../entity/mapInfo";
 import {Button} from "../../controls/button";
 import {ScoreZonesEnum} from "../../enums/scoreZones.enum";
-import TownSpawner from "./townSpawner";
 import {TownLetters} from "../../enums/townLetters";
 import {TownMapZone} from "../../entity/townMapZone";
 import MapCamera from "./camera";
 import {EventBus} from "../bus/EventBus";
 import {director} from "../../index";
-import {SinglePlayDirector} from "../../director/single-play-director";
+import {sharpenTexts} from "../../scale/screen";
 import {Point} from "../../entity/point";
 import Graphics = Phaser.GameObjects.Graphics;
 
@@ -44,7 +43,7 @@ export default class MapScene extends Phaser.Scene {
     townZones: Map<TownLetters, TownMapZone>
 
     get playerInfo(): PlayerInfo {
-        return (director as SinglePlayDirector).playerInfo
+        return director.playerInfo
     }
 
 
@@ -71,14 +70,11 @@ export default class MapScene extends Phaser.Scene {
 
         const mapInfo: MapInfo = this.cache.json.get(mapAssertInfoName)
 
-        mapInfo.hexagons.forEach((h) => this.playerInfo.hexagons.set(h.index, h))
-
         this.artifactMapZones = new Map()
+        mapInfo.artifacts.forEach((z) => this.artifactMapZones.set(z.artifact, z))
 
-        mapInfo.artifacts.forEach((z) => {
-            this.artifactMapZones.set(z.artifact, z)
-            this.playerInfo.artifactScores.set(z.artifact, z.score)
-        })
+        this.townZones = new Map()
+        mapInfo.towns.forEach((z) => this.townZones.set(z.letter, z))
 
         this.graphics = this.add.graphics();
 
@@ -86,19 +82,8 @@ export default class MapScene extends Phaser.Scene {
 
         this.polygonGameObjects = new Map()
 
-        const townSpawner = new TownSpawner()
-
-        for (let letter in TownLetters) {
-            this.playerInfo.townByLetter.set(letter as TownLetters, [])
-        }
-
-
-        this.townZones = new Map()
-        mapInfo.towns.forEach((z) => {
-            this.townZones.set(z.letter, z)
-            this.playerInfo.townScores.set(z.letter, z.score)
-        })
-
+        this.hexA = null
+        this.hexB = null
 
         //----
 
@@ -107,15 +92,6 @@ export default class MapScene extends Phaser.Scene {
         //----
 
         this.playerInfo.hexagons.forEach((h: Hexagon, index: number) => {
-
-                if (this.isTown(h.artifact)) {
-                    const townNumber = Number(h.artifact.substring(5))
-                    h.net = townNumber
-                    h.townLetter = townSpawner.getByNumber(townNumber)
-                    this.playerInfo.townNets.set(h.net, h.index)
-
-                    this.playerInfo.townByLetter.get(h.townLetter).push(h)
-                }
 
                 const polygonGeom = new Phaser.Geom.Polygon(h.points)
                 const polygonGameObject = this.add.polygon(0, 0, h.points).setOrigin(0, 0)
@@ -130,36 +106,45 @@ export default class MapScene extends Phaser.Scene {
                 polygonGameObject
                     .setInteractive(polygonGeom,
                         (hitArea: Phaser.Geom.Polygon, x: number, y: number) => this.playerInfo.readyTouch && !camera.getDragging() && hitArea.contains(x, y))
-                    .on('pointerdown', (pointer: any, localX: any, localY: any) => {
+                    .on('pointerdown', (pointer: Phaser.Input.Pointer) => {
                         if (camera.getDragging()) {
                             this.clearSelected()
                         } else if (pointer.leftButtonDown()) {
                             this.hexA = h
+                            this.addToSelected(h)
                         }
                     })
-                    .on('pointerup', (pointer: any, localX: any, localY: any) => {
+                    .on('pointerup', (pointer: Phaser.Input.Pointer) => {
                         if (camera.getDragging()) {
                             this.clearSelected()
-                        } else if (pointer.leftButtonReleased()) {
+                        } else if (pointer.leftButtonReleased() && this.hexA) {
                             this.hexB = h
                             EventBus.emit(EventsEnum.MAKE_ROAD, this.hexA, this.hexB)
                             this.clearSelected()
                         }
                     })
-                    .on('pointerover', (pointer: any, localX: any, localY: any) => {
+                    .on('pointerover', () => {
                         if (camera.getDragging()) {
                             this.clearSelected()
                         } else {
                             this.addToSelected(h)
                         }
                     })
-                    .on('pointerout', (pointer: any, localX: any, localY: any) => {
+                    .on('pointerout', () => {
                         if (this.hexA != h && this.hexB != h) {
                             this.removeFromSelected(h)
                         }
                     })
             }
         )
+
+        // отпустили палец/кнопку не над гексом - выбор сбрасывается
+        this.input.on(Phaser.Input.Events.POINTER_UP_OUTSIDE, () => this.clearSelected())
+        this.input.on(Phaser.Input.Events.POINTER_UP, (pointer: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+            if (over.length == 0) {
+                this.clearSelected()
+            }
+        })
 
         //----
 
@@ -169,18 +154,19 @@ export default class MapScene extends Phaser.Scene {
             }
         }
 
+        sharpenTexts(this, 2)
 
         //----
 
 
-        EventBus.on(EventsEnum.DRAW_ROAD, this.drawRoad, this)
+        EventBus.onScene(this, EventsEnum.DRAW_ROAD, this.drawRoad)
 
-        EventBus.on(EventsEnum.END_ROUND_AFTER, this.drawScore, this)
+        EventBus.onScene(this, EventsEnum.END_ROUND_AFTER, this.drawScore)
 
 
-        EventBus.on(EventsEnum.CONNECT_ARTIFACT, this.onConnectArtifact, this)
-        EventBus.on(EventsEnum.CONNECT_TOWN, this.onConnectTown, this)
-        EventBus.on(EventsEnum.MARK_HEXAGON, this.markHexagon, this)
+        EventBus.onScene(this, EventsEnum.CONNECT_ARTIFACT, this.onConnectArtifact)
+        EventBus.onScene(this, EventsEnum.CONNECT_TOWN, this.onConnectTown)
+        EventBus.onScene(this, EventsEnum.MARK_HEXAGON, this.markHexagon)
 
 
         //----
@@ -278,7 +264,7 @@ export default class MapScene extends Phaser.Scene {
         // рисуем на боковой панельке подсчитанные очки
         for (const z in ScoreZonesEnum) {
             const score = this.playerInfo.scores[z]
-            if (score) {
+            if (score !== undefined && score !== null) {
                 this.scoreZones[z].setText(score.toString())
             }
         }
@@ -334,14 +320,9 @@ export default class MapScene extends Phaser.Scene {
 
     }
 
-    private isTown(artifact: ArtifactsEnum) {
-        return artifact?.startsWith("TOWN_")
-    }
-
-
     private getConfigOrDefault(): MapConfig {
         const res = this.scene.settings.data as MapConfig;
-        return res.island ? res : {
+        return res?.island ? res : {
             island: IslandEnum.PETIT,
             roundCount: 2
         }

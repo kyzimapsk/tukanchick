@@ -2,11 +2,13 @@ export enum CommandsEnum {
 
     // send
     CREATE_LOBBY = "CREATE_LOBBY",
-    CLOSE_LOBBY = "CLOSE_LOBBY",
     CLOSE_MULTIPLAYER = "CLOSE_MULTIPLAYER",
     JOIN_TO_LOBBY = "JOIN_TO_LOBBY",
+    // карта загружена / экран очков закрыт - игрок готов к следующему раунду
     READY_TO_START = "READY_TO_START",
     FORCE_START = "FORCE_START",
+    MAKE_ROAD = "MAKE_ROAD",
+    SKIP_TURN = "SKIP_TURN",
 
 
     // receive
@@ -17,4 +19,10 @@ export enum CommandsEnum {
     CLOSE_LOBBY_SUCCESS = "CLOSE_LOBBY_SUCCESS",
 
     START_GAME_SUCCESS = "START_GAME_SUCCESS",
+    START_TURN = "START_TURN",
+    TURN_PROGRESS = "TURN_PROGRESS",
+    ROAD_REJECTED = "ROAD_REJECTED",
+    END_ROUND = "END_ROUND",
+
+    ERROR = "ERROR",
 }
