@@ -23,6 +23,7 @@ import {
     NAME_MAX_LENGTH
 } from "../../multiplayer/protocol";
 import {keepFitted} from "../../scale/screen";
+import {copyText} from "../../controls/clipboard";
 
 const NICKNAME_KEY = 'user_nick_name'
 
@@ -55,6 +56,7 @@ export default class LobbyScene extends Phaser.Scene {
     joinLobbyButton: Button
 
     createdLobbyIdText: Button
+    copyLobbyIdButton: Button
     joinLobbyCaptionText: Button
     joinLobbyIdTextBox: Input
 
@@ -65,6 +67,8 @@ export default class LobbyScene extends Phaser.Scene {
     exitButton: Button
 
     selfId: number
+
+    lobbyId: string
 
     constructor() {
         super(ScenesEnum.LOBBY)
@@ -77,6 +81,7 @@ export default class LobbyScene extends Phaser.Scene {
         this.joinLobbyButton = new Button(this).preloadExtern(Assets.SAND_1)
 
         this.createdLobbyIdText = new Button(this)
+        this.copyLobbyIdButton = new Button(this).preloadExtern(Assets.SAND_1)
         this.joinLobbyCaptionText = new Button(this)
         this.joinLobbyIdTextBox = new Input(this)
 
@@ -94,6 +99,7 @@ export default class LobbyScene extends Phaser.Scene {
 
     create() {
         this.selfId = undefined
+        this.lobbyId = undefined
 
         const centerX = this.config.parentWidth / 2
         const leftX = 40
@@ -155,6 +161,14 @@ export default class LobbyScene extends Phaser.Scene {
         let textLobbyIdPosY = buttonCreateOrJoinPosY + buttonHeight + buttonSpace
 
         this.createdLobbyIdText.create(centerX, textLobbyIdPosY, "__").setTextFont(30, 'white', 'bold').setOrigin(0.5)
+            .setVisible(false)
+
+        // хост копирует ID и отправляет его остальным игрокам
+        this.copyLobbyIdButton.create(rightColumnCenterX + buttonWidth / 2 - 80, textLobbyIdPosY,
+            "COPY", () => this.copyLobbyId()
+        ).setDisplaySize(150, buttonHeight - 6)
+            .setOrigin(0.5)
+            .setTextFont(26, "black", "bold")
             .setVisible(false)
 
         this.joinLobbyCaptionText.create(leftColumnCenterX, textLobbyIdPosY, "JOIN TO ").setTextFont(30, 'white', 'bold').setOrigin(0.5)
@@ -234,6 +248,10 @@ export default class LobbyScene extends Phaser.Scene {
 
     createLobbySuccess(lobbyDto: LobbyDto) {
         this.createdLobbyIdText.setText(`HOST LOBBY ID: ${lobbyDto.lobbyId}`).setVisible(true)
+        // текст сдвигается влево, справа от него - кнопка копирования
+        this.createdLobbyIdText.textGO.setX(this.config.parentWidth / 2 - 90)
+        this.lobbyId = lobbyDto.lobbyId
+        this.copyLobbyIdButton.setVisible(true)
         this.onJoined(lobbyDto)
         this.enableHostControls()
     }
@@ -269,6 +287,15 @@ export default class LobbyScene extends Phaser.Scene {
         this.nicknameLabel.setVisible(false)
         this.nicknameTextBox.setVisible(false)
         startMultiPlayer(this.selfId, this.nicknameTextBox.getText().trim())
+    }
+
+    async copyLobbyId() {
+        if (!this.lobbyId) {
+            return
+        }
+        const copied = await copyText(this.lobbyId)
+        this.copyLobbyIdButton.setText(copied ? "COPIED!" : "FAILED")
+        this.time.delayedCall(1500, () => this.copyLobbyIdButton.setText("COPY"))
     }
 
     closeLobbySuccess() {
