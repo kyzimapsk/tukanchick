@@ -33,6 +33,8 @@ export interface LobbyDto extends BaseDto {
     members?: MemberDto[]
     // id получателя сообщения
     you?: number
+    // кто покинул лобби/игру (в LEAVE_PARTY_MEMBER_SUCCESS)
+    left?: MemberDto
     gameState?: GameStateDto
 }
 

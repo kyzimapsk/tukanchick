@@ -28,7 +28,8 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "").split(",").map((s) =
 
 const MAX_CONNECTIONS = 1000
 const MAX_MESSAGE_BYTES = 4 * 1024
-const HEARTBEAT_MS = 30 * 1000
+// пропавший без закрытия соединения игрок (сеть, сон телефона) замечается за 1-2 интервала
+const HEARTBEAT_MS = 10 * 1000
 
 // не больше RATE_BURST сообщений подряд и RATE_PER_SECOND в среднем
 const RATE_BURST = 20

@@ -19,6 +19,7 @@ const COLOR = {
     ink: 0x4a2f17,
     orange: 0xf0962b,
     green: 0x6fae3e,
+    red: 0xb3402a,
     shadow: 0x000000,
 }
 const INK = "#4a2f17"
@@ -94,6 +95,10 @@ class Pill {
         return 34
     }
 
+    get visible() {
+        return this.container.visible
+    }
+
     setY(y: number) {
         this.container.setY(y)
         return this
@@ -136,7 +141,10 @@ export default class ControlsScene extends Phaser.Scene {
     private villages: Map<TownLetters, { circle: Phaser.GameObjects.Graphics, text: Phaser.GameObjects.Text, x: number, y: number }>
 
     private bonusPill: Pill
+    private noticePill: Pill
     private statusPill: Pill
+
+    private noticeTimer: Phaser.Time.TimerEvent
 
     private artifactSplash: Phaser.GameObjects.Image
 
@@ -168,6 +176,7 @@ export default class ControlsScene extends Phaser.Scene {
 
         // плашки под панелью, поверх карты
         this.bonusPill = new Pill(this, this.layout.width / 2, 0, COLOR.orange, "#ffffff")
+        this.noticePill = new Pill(this, this.layout.width / 2, 0, COLOR.red, "#ffffff")
         this.statusPill = new Pill(this, this.layout.width / 2, 0, COLOR.ink, PARCHMENT)
 
         this.artifactSplash = this.add.image(this.layout.width / 2, this.layout.height + 110, Assets.STAFF_IMAGE, ArtifactsEnum.OBELISK)
@@ -182,6 +191,7 @@ export default class ControlsScene extends Phaser.Scene {
         EventBus.onScene(this, EventsEnum.CONNECT_TOWN, this.onConnectTown)
         EventBus.onScene(this, EventsEnum.BONUS_ROAD, this.updateRoadCounter)
         EventBus.onScene(this, EventsEnum.STATUS, this.setStatus)
+        EventBus.onScene(this, EventsEnum.NOTICE, this.showNotice)
 
         this.onStartTurn()
         if (!this.playerInfo.readyTouch) {
@@ -401,16 +411,31 @@ export default class ControlsScene extends Phaser.Scene {
         this.layoutPills()
     }
 
+    private showNotice(message: string) {
+        this.noticePill.show(message)
+        this.layoutPills()
+
+        this.noticeTimer?.remove()
+        this.noticeTimer = this.time.delayedCall(6000, () => {
+            this.noticePill.show("")
+            this.layoutPills()
+        })
+    }
+
+    /**
+     * Плашки под панелью идут стопкой: бонусная дорога, уведомление, статус
+     */
     private layoutPills() {
-        if (!this.bonusPill || !this.statusPill) {
+        if (!this.bonusPill || !this.noticePill || !this.statusPill) {
             return
         }
         let y = this.layout.height + 28
-        this.bonusPill.setY(y)
-        if (this.playerInfo.bonusRoad > 0) {
-            y += this.bonusPill.height + 8
+        for (const pill of [this.bonusPill, this.noticePill, this.statusPill]) {
+            pill.setY(y)
+            if (pill.visible) {
+                y += pill.height + 8
+            }
         }
-        this.statusPill.setY(y)
     }
 
     /**

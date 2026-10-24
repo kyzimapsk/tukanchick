@@ -187,7 +187,10 @@ export class LobbyManager {
             lobby.host = lobby.members[0]
         }
         lobby.game?.removePlayer(member.memberId)
-        lobby.broadcast(CommandsEnum.LEAVE_PARTY_MEMBER_SUCCESS, lobby.dto())
+        lobby.broadcast(CommandsEnum.LEAVE_PARTY_MEMBER_SUCCESS, {
+            ...lobby.dto(),
+            left: {memberId: member.memberId, name: member.name},
+        })
     }
 
     private onGameEnd(lobby: Lobby) {

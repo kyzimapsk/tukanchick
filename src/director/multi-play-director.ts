@@ -37,7 +37,7 @@ export class MultiPlayDirector extends Director {
             .onReceive<TurnProgressDto>(CommandsEnum.TURN_PROGRESS, (data) => this.onTurnProgress(data))
             .onReceive<RoadDto>(CommandsEnum.ROAD_REJECTED, () => this.onRoadRejected())
             .onReceive<RoundEndDto>(CommandsEnum.END_ROUND, (data) => this.onRoundEnd(data))
-            .onReceive<LobbyDto>(CommandsEnum.LEAVE_PARTY_MEMBER_SUCCESS, () => EventBus.emit(EventsEnum.STATUS, "A PLAYER LEFT THE GAME"))
+            .onReceive<LobbyDto>(CommandsEnum.LEAVE_PARTY_MEMBER_SUCCESS, (data) => this.onPlayerLeft(data))
             .onReceive<ErrorDto>(CommandsEnum.ERROR, (data) => EventBus.emit(EventsEnum.STATUS, String(data.message)))
             .onClose(this.onConnectionLost)
 
@@ -93,6 +93,14 @@ export class MultiPlayDirector extends Director {
         if (!this.playerInfo.readyTouch) {
             this.waitForOthers(dto)
         }
+    }
+
+    private onPlayerLeft(dto: LobbyDto) {
+        const name = dto.left?.name ? String(dto.left.name) : "A PLAYER"
+        const remaining = dto.members?.length ?? 0
+        const rest = remaining <= 1 ? "YOU PLAY ALONE" : `${remaining} PLAYERS REMAIN`
+
+        EventBus.emit(EventsEnum.NOTICE, `${name} LEFT THE GAME · ${rest}`)
     }
 
     private onRoadRejected() {
