@@ -153,7 +153,7 @@ export function hudLayout(screenWidth: number, screenHeight: number): HudLayout 
     const narrow = screenWidth / screenHeight < 1
 
     const width = narrow ? 560 : 1000
-    const height = narrow ? 360 : 200
+    const height = narrow ? 290 : 160
 
     // панель занимает не больше 30% высоты и не крупнее "1 виртуальный px = 1.2 css px"
     const zoom = Math.min(screenWidth / width, screenHeight * 0.3 / height, pixelRatio() * 1.2)
