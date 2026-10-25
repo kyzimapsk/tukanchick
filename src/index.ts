@@ -14,6 +14,8 @@ import {EventsEnum} from "./enums/events.enum";
 import LoadScene from "./scene/load/load.scene";
 import {installAutoResize, scaleConfig} from "./scale/screen";
 import {roundCountFor} from "./game/board";
+import {randomSeed} from "./game/random";
+import {isRandomMap} from "./settings";
 
 const parent = document.getElementById('main-screen')
 
@@ -44,7 +46,11 @@ export function startSinglePlayer(island: IslandEnum) {
 
     director = new SinglePlayDirector(game)
 
-    EventBus.emit(EventsEnum.START_GAME, {island, roundCount: roundCountFor(island)} as MapConfig)
+    EventBus.emit(EventsEnum.START_GAME, {
+        island,
+        roundCount: roundCountFor(island),
+        seed: isRandomMap() ? randomSeed() : undefined,
+    } as MapConfig)
 }
 
 export function startMultiPlayer(selfId: number, nickname: string) {

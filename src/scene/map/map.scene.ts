@@ -18,6 +18,7 @@ import {EventBus} from "../bus/EventBus";
 import {director} from "../../index";
 import {sharpenTexts} from "../../scale/screen";
 import {COLOR, TEXT_COLOR, textStyle} from "../../ui/theme";
+import {isTown} from "../../game/board";
 import {Point} from "../../entity/point";
 import Graphics = Phaser.GameObjects.Graphics;
 
@@ -66,12 +67,9 @@ export default class MapScene extends Phaser.Scene {
 
     create() {
 
-        const mapAssertTextureName = this.mapConfig.island == IslandEnum.GRANDE ?  Assets.MAP_ISLAND_GRANDE : Assets.MAP_ISLAND_PETIT;
-        const mapAssertInfoName = this.mapConfig.island == IslandEnum.GRANDE ?  Assets.MAPINFO_ISLAND_GRANDE : Assets.MAPINFO_ISLAND_PETIT;
+        const mapInfo: MapInfo = director.mapInfo
 
-        const map = this.add.image(0, 0, mapAssertTextureName).setOrigin(0, 0)
-
-        const mapInfo: MapInfo = this.cache.json.get(mapAssertInfoName)
+        const bounds = mapInfo.generated ? this.drawGeneratedIsland(mapInfo) : this.drawClassicIsland()
 
         this.artifactMapZones = new Map()
         mapInfo.artifacts.forEach((z) => this.artifactMapZones.set(z.artifact, z))
@@ -90,7 +88,7 @@ export default class MapScene extends Phaser.Scene {
 
         //----
 
-        const camera = new MapCamera(this, map.width, map.height)
+        const camera = new MapCamera(this, bounds.width, bounds.height, bounds.x, bounds.y)
 
         //----
 
@@ -183,6 +181,106 @@ export default class MapScene extends Phaser.Scene {
 
     }
 
+    /**
+     * Классический остров: картинка с нарисованными гексами и листом очков сбоку
+     */
+    private drawClassicIsland(): Phaser.Geom.Rectangle {
+        const texture = this.mapConfig.island == IslandEnum.GRANDE ? Assets.MAP_ISLAND_GRANDE : Assets.MAP_ISLAND_PETIT
+        const map = this.add.image(0, 0, texture).setOrigin(0, 0)
+        return new Phaser.Geom.Rectangle(0, 0, map.width, map.height)
+    }
+
+    /**
+     * Сгенерированный остров рисуется кодом: берег, плитки земель по форме гексов,
+     * достопримечательности и деревни. Возвращает границы карты для камеры.
+     */
+    private drawGeneratedIsland(mapInfo: MapInfo): Phaser.Geom.Rectangle {
+        const hexes = mapInfo.hexagons
+        const allPoints = hexes.flatMap((h) => h.points)
+        const margin = 160
+
+        const minX = Math.min(...allPoints.map((p) => p.x))
+        const maxX = Math.max(...allPoints.map((p) => p.x))
+        const minY = Math.min(...allPoints.map((p) => p.y))
+        const maxY = Math.max(...allPoints.map((p) => p.y))
+        const bounds = new Phaser.Geom.Rectangle(minX - margin, minY - margin, maxX - minX + margin * 2, maxY - minY + margin * 2)
+
+        const centerOf = (h: Hexagon) => ({
+            x: h.points.reduce((s, p) => s + p.x, 0) / h.points.length,
+            y: h.points.reduce((s, p) => s + p.y, 0) / h.points.length,
+        })
+        const scaled = (h: Hexagon, k: number) => {
+            const c = centerOf(h)
+            return h.points.map((p) => ({x: c.x + (p.x - c.x) * k, y: c.y + (p.y - c.y) * k}))
+        }
+
+        // пергамент вокруг и мягкий берег
+        const ground = this.add.graphics()
+        ground.fillStyle(COLOR.parchment, 1).fillRect(bounds.x - 5000, bounds.y - 5000, bounds.width + 10000, bounds.height + 10000)
+        hexes.forEach((h) => ground.fillStyle(0xdcc596, 1).fillPoints(scaled(h, 1.3), true))
+        hexes.forEach((h) => ground.fillStyle(0xc9a76a, 1).fillPoints(scaled(h, 1.1), true))
+
+        this.add.image(bounds.x, bounds.y, this.paintTiles(hexes, bounds)).setOrigin(0, 0)
+
+        const grid = this.add.graphics().lineStyle(3, COLOR.wood, 0.35)
+        hexes.forEach((h) => grid.strokePoints(h.points, true))
+
+        // достопримечательности и деревни
+        const icons = this.add.graphics()
+        hexes.forEach((h) => {
+            const c = centerOf(h)
+            if (isTown(h.artifact)) {
+                // хижина на причале с поля игры; буква деревни - в левом верхнем углу гекса
+                icons.fillStyle(COLOR.shadow, 0.25).fillEllipse(c.x + 18, c.y + 74, 110, 26)
+                this.add.image(c.x + 18, c.y + 22, Assets.STAFF_IMAGE, "VILLAGE").setScale(0.64)
+            } else if (h.artifact) {
+                icons.fillStyle(COLOR.shadow, 0.25).fillEllipse(c.x, c.y + 52, 96, 26)
+                const icon = this.add.image(c.x, c.y, Assets.STAFF_IMAGE, h.artifact)
+                icon.setScale(Math.min(130 / icon.frame.width, 130 / icon.frame.height))
+            }
+        })
+
+        return bounds
+    }
+
+    /**
+     * Плитки земель собираются в одну текстуру один раз: каждая обрезается по своему гексу
+     * (в атласе у плиток чёрные углы), а на кадр рисуется всего одна картинка
+     */
+    private paintTiles(hexes: Hexagon[], bounds: Phaser.Geom.Rectangle): string {
+        const key = "generated-island-tiles"
+        if (this.textures.exists(key)) {
+            this.textures.remove(key)
+        }
+
+        const canvasTexture = this.textures.createCanvas(key, Math.ceil(bounds.width), Math.ceil(bounds.height))
+        const ctx = canvasTexture.context
+        const atlas = this.textures.get(Assets.GROUNDS_IMAGE)
+        const source = atlas.getSourceImage() as CanvasImageSource
+
+        hexes.forEach((h) => {
+            const xs = h.points.map((p) => p.x - bounds.x)
+            const ys = h.points.map((p) => p.y - bounds.y)
+            const left = Math.min(...xs), right = Math.max(...xs)
+            const top = Math.min(...ys), bottom = Math.max(...ys)
+            const frame = atlas.get(h.ground)
+
+            ctx.save()
+            ctx.beginPath()
+            h.points.forEach((p, i) => i == 0
+                ? ctx.moveTo(p.x - bounds.x, p.y - bounds.y)
+                : ctx.lineTo(p.x - bounds.x, p.y - bounds.y))
+            ctx.closePath()
+            ctx.clip()
+            ctx.drawImage(source, frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight,
+                left - 2, top - 2, right - left + 4, bottom - top + 4)
+            ctx.restore()
+        })
+
+        canvasTexture.refresh()
+        return key
+    }
+
     private addToSelected(hex: Hexagon) {
         hex.isSelected = true
         this.markHexagon(hex)
@@ -272,6 +370,10 @@ export default class MapScene extends Phaser.Scene {
      * Отметка на листе очков сбоку карты: зелёный круг, как обводят ручкой
      */
     private markFound(point: Point) {
+        if (!point) {
+            // у сгенерированной карты нет листа очков сбоку
+            return
+        }
         this.graphics
             .fillStyle(COLOR.green, 0.18).fillCircle(point.x, point.y, 44)
             .lineStyle(7, COLOR.green, 0.95).strokeCircle(point.x, point.y, 44)
@@ -298,7 +400,13 @@ export default class MapScene extends Phaser.Scene {
 
 
     private drawTownLetter(hexagon: Hexagon) {
-        if (hexagon.townLetter) {
+        if (hexagon.townLetter && director.mapInfo.generated) {
+            // на сгенерированной карте в центре гекса хижина - буква уходит в левый верхний угол
+            const c = this.hexagonCenter(hexagon)
+            this.add.text(c.x - 52, c.y - 58, hexagon.townLetter, textStyle(72))
+                .setOrigin(0.5)
+                .setStroke(TEXT_COLOR.parchment, 10)
+        } else if (hexagon.townLetter) {
 
             const x = hexagon.points[5].x + (hexagon.points[1].x - hexagon.points[5].x) / 3
             const y = hexagon.points[0].y + (hexagon.points[2].y - hexagon.points[0].y) / 3

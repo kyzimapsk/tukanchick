@@ -10,6 +10,7 @@ import {client} from "../../multiplayer/client";
 import {keepFitted, pixelRatio} from "../../scale/screen";
 import {COLOR, drawFrame, textStyle} from "../../ui/theme";
 import {WoodButton} from "../../ui/wood-button";
+import {isRandomMap, setRandomMap} from "../../settings";
 
 // logo.jpg 880x881 в деревянной рамке - виртуальное разрешение меню (и лобби поверх него)
 const LOGO_WIDTH = 880
@@ -71,6 +72,14 @@ export default class MainMenuScene extends Phaser.Scene {
 
         this.addHover(this.petitButton.imageGO)
         this.addHover(this.grandeButton.imageGO)
+
+        // острова Petit/Grande с классической или сгенерированной раскладкой
+        const randomMapLabel = () => `RANDOM ISLAND: ${isRandomMap() ? "ON" : "OFF"}`
+        const randomMapButton = new WoodButton(this, centerX, grandeButtonHeght + buttonHeight + buttonSpace, 300, 48, randomMapLabel(),
+            () => {
+                setRandomMap(!isRandomMap())
+                randomMapButton.setText(randomMapLabel())
+            }, "parchment", 18)
 
         let multiplayerHeight = grandeButtonHeght + (buttonHeight + buttonSpace) * 2
         this.multiplayerButton = new WoodButton(this, centerX, multiplayerHeight, 280, 64, "MULTIPLAYER",

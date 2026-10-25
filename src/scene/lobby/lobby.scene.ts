@@ -24,6 +24,7 @@ import {keepFitted, pixelRatio} from "../../scale/screen";
 import {copyText} from "../../controls/clipboard";
 import {COLOR, drawPanel, TEXT_COLOR, textStyle} from "../../ui/theme";
 import {WoodButton} from "../../ui/wood-button";
+import {isRandomMap, setRandomMap} from "../../settings";
 
 const NICKNAME_KEY = 'user_nick_name'
 
@@ -71,6 +72,7 @@ export default class LobbyScene extends Phaser.Scene {
     startPetitButton: WoodButton
     startGrandeButton: WoodButton
     exitButton: WoodButton
+    randomMapButton: WoodButton
 
     selfId: number
 
@@ -168,6 +170,14 @@ export default class LobbyScene extends Phaser.Scene {
             () => this.startGame(IslandEnum.GRANDE), "wood", 22).setVisible(false)
         this.exitButton = new WoodButton(this, left + thirdWidth * 2.5, bottomY, bottomButtonWidth, 56, "EXIT",
             () => this.exit(), "parchment", 22)
+
+        // хост выбирает классическую или случайную раскладку острова
+        const randomMapLabel = () => `RANDOM ISLAND: ${isRandomMap() ? "ON" : "OFF"}`
+        this.randomMapButton = new WoodButton(this, left + contentWidth - 130, playersY - 4, 260, 36, randomMapLabel(),
+            () => {
+                setRandomMap(!isRandomMap())
+                this.randomMapButton.setText(randomMapLabel())
+            }, "parchment", 16).setVisible(false)
 
         this.showMessage("Create a lobby or enter its ID to join")
 
@@ -272,12 +282,14 @@ export default class LobbyScene extends Phaser.Scene {
             island: state.island,
             roundCount: state.roundCount || roundCountFor(state.island),
             townRoll: state.townRoll,
+            seed: Number.isInteger(state.seed) ? state.seed : undefined,
         } as MapConfig)
     }
 
     enableHostControls() {
         this.startPetitButton.setVisible(true)
         this.startGrandeButton.setVisible(true)
+        this.randomMapButton.setVisible(true)
         this.showMessage("Send the lobby ID to your friends, then start the game")
     }
 
@@ -310,6 +322,6 @@ export default class LobbyScene extends Phaser.Scene {
     }
 
     startGame(island: IslandEnum) {
-        client.send(CommandsEnum.FORCE_START, {island} as GameStateDto)
+        client.send(CommandsEnum.FORCE_START, {island, randomMap: isRandomMap()} as GameStateDto)
     }
 }

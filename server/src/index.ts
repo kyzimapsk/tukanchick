@@ -236,8 +236,10 @@ function handle(member: Member, command: CommandsEnum, data: BaseDto = {}) {
             return lobbies.join(member, dto.lobbyId, typeof dto.member === "object" ? dto.member?.name : undefined)
         }
 
-        case CommandsEnum.FORCE_START:
-            return lobbies.start(member, (data as { island?: unknown }).island)
+        case CommandsEnum.FORCE_START: {
+            const dto = data as { island?: unknown, randomMap?: unknown }
+            return lobbies.start(member, dto.island, dto.randomMap)
+        }
 
         case CommandsEnum.READY_TO_START:
             return lobbies.ready(member)

@@ -55,8 +55,11 @@ export class Game {
 
     private timer: NodeJS.Timeout = null
 
+    /**
+     * @param seed зерно случайной карты (mapInfo уже сгенерирован по нему); не задано - классическая карта
+     */
     constructor(readonly island: IslandEnum, mapInfo: MapInfo, members: { memberId: number, name: string, send: Send }[],
-                private onEnd: () => void) {
+                private onEnd: () => void, readonly seed?: number) {
         this.roundCount = board.roundCountFor(island)
         this.townRoll = TownSpawner.randomRoll()
 
@@ -70,7 +73,7 @@ export class Game {
     }
 
     get state(): GameStateDto {
-        return {island: this.island, roundCount: this.roundCount, townRoll: this.townRoll}
+        return {island: this.island, roundCount: this.roundCount, townRoll: this.townRoll, seed: this.seed}
     }
 
     get ended() {

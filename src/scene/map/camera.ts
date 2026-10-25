@@ -24,7 +24,8 @@ export default class MapCamera {
     // жест двумя пальцами
     private pinchStart: { distance: number, zoom: number, worldX: number, worldY: number } = null
 
-    constructor(private scene: Phaser.Scene, private mapWidth: number, private mapHeight: number) {
+    constructor(private scene: Phaser.Scene, private mapWidth: number, private mapHeight: number,
+                private mapX: number = 0, private mapY: number = 0) {
 
         this.camera = scene.cameras.main
 
@@ -62,7 +63,7 @@ export default class MapCamera {
 
         if (reset) {
             this.setZoom(this.minZoom)
-            this.camera.centerOn(this.mapWidth / 2, this.mapHeight / 2)
+            this.camera.centerOn(this.mapX + this.mapWidth / 2, this.mapY + this.mapHeight / 2)
         } else {
             this.setZoom(this.camera.zoom)
             this.camera.centerOn(center.x, center.y)
@@ -113,7 +114,7 @@ export default class MapCamera {
         const padX = Math.max(0, (visibleWidth - this.mapWidth) / 2)
         const padY = Math.max(0, (visibleHeight - this.mapHeight) / 2)
 
-        this.camera.setBounds(-padX, -padY, this.mapWidth + padX * 2, this.mapHeight + padY * 2)
+        this.camera.setBounds(this.mapX - padX, this.mapY - padY, this.mapWidth + padX * 2, this.mapHeight + padY * 2)
     }
 
     private activeTouches(): Pointer[] {

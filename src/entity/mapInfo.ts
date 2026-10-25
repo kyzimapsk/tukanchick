@@ -13,4 +13,7 @@ export interface MapInfo {
 
     hexagons: Hexagon[]
 
+    // карта сгенерирована (рисуется кодом, без картинки острова и листа очков сбоку)
+    generated?: boolean
+
 }

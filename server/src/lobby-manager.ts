@@ -11,6 +11,8 @@ import {
     NAME_MAX_LENGTH
 } from "../../src/multiplayer/protocol";
 import {Game, Send} from "./game";
+import {generateMapInfo} from "../../src/game/map-generator";
+import {randomSeed} from "../../src/game/random";
 
 export interface Member {
     memberId: number
@@ -124,7 +126,7 @@ export class LobbyManager {
         lobby.broadcast(CommandsEnum.JOIN_PARTY_MEMBER_SUCCESS, lobby.dto(), member)
     }
 
-    start(member: Member, island: unknown) {
+    start(member: Member, island: unknown, randomMap: unknown) {
         const lobby = member.lobby
         if (!lobby || lobby.host !== member) {
             return this.error(member, "ONLY HOST CAN START")
@@ -136,7 +138,12 @@ export class LobbyManager {
             return this.error(member, "UNKNOWN ISLAND")
         }
 
-        lobby.game = new Game(island, this.mapInfos.get(island), lobby.members, () => this.onGameEnd(lobby))
+        // зерно выбирает сервер, клиенты строят по нему ту же карту
+        const seed = randomMap === true ? randomSeed() : undefined
+        const baseMapInfo = this.mapInfos.get(island)
+        const mapInfo = seed ? generateMapInfo(baseMapInfo, seed) : baseMapInfo
+
+        lobby.game = new Game(island, mapInfo, lobby.members, () => this.onGameEnd(lobby), seed)
 
         lobby.broadcast(CommandsEnum.START_GAME_SUCCESS, {...lobby.dto(), gameState: lobby.game.state})
     }

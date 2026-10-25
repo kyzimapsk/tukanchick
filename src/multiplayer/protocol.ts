@@ -26,6 +26,10 @@ export interface GameStateDto extends BaseDto {
     roundCount?: number
     // раскладка городов, общая для всех игроков
     townRoll?: number
+    // хост просит случайную карту (FORCE_START)
+    randomMap?: boolean
+    // зерно случайной карты: по нему все строят одинаковый остров (START_GAME_SUCCESS)
+    seed?: number
 }
 
 export interface LobbyDto extends BaseDto {

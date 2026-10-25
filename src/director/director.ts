@@ -9,6 +9,7 @@ import {IslandEnum} from "../enums/islands.enum";
 import {Assets} from "../assets";
 import {MapInfo} from "../entity/mapInfo";
 import {buildRoad, createPlayer, initBoard, RoadResult} from "../game/board";
+import {generateMapInfo} from "../game/map-generator";
 import {StandingDto} from "../multiplayer/protocol";
 import {ScoreSceneData} from "../scene/map/score.scene";
 
@@ -17,6 +18,9 @@ export abstract class Director {
     mapConfig: MapConfig
 
     playerInfo: PlayerInfo
+
+    // карта текущей игры: классическая из ассетов или сгенерированная
+    mapInfo: MapInfo
 
     constructor(protected game: Phaser.Game) {
         EventBus.clear()
@@ -86,9 +90,11 @@ export abstract class Director {
         this.playerInfo = createPlayer(playerName)
 
         const mapInfoAsset = mapConfig.island == IslandEnum.GRANDE ? Assets.MAPINFO_ISLAND_GRANDE : Assets.MAPINFO_ISLAND_PETIT
-        const mapInfo: MapInfo = this.game.cache.json.get(mapInfoAsset)
+        const baseMapInfo: MapInfo = this.game.cache.json.get(mapInfoAsset)
 
-        initBoard(this.playerInfo, mapInfo, townRoll)
+        this.mapInfo = mapConfig.seed ? generateMapInfo(baseMapInfo, mapConfig.seed) : baseMapInfo
+
+        initBoard(this.playerInfo, this.mapInfo, townRoll)
     }
 
     protected showMap() {
